@@ -106,6 +106,16 @@ jobs:
         [ -e files ] && mv files $OPENWRT_PATH/files
         [ -e $CONFIG_FILE ] && mv $CONFIG_FILE $OPENWRT_PATH/.config
 
+    - name: Force Single Device Build
+      run: |
+        cd $OPENWRT_PATH
+        make defconfig
+        # 清除所有设备选择，只保留 jdc_ax1800-pro
+        sed -i '/^CONFIG_TARGET_DEVICE_qualcommax_ipq60xx_DEVICE_/d' .config
+        echo 'CONFIG_TARGET_DEVICE_qualcommax_ipq60xx_DEVICE_jdc_ax1800-pro=y' >> .config
+        make defconfig
+        grep -E 'DEVICE_jdc_ax1800|TARGET_DEVICE' .config || true
+
     - name: Download DL Package
       run: |
         cd $OPENWRT_PATH
