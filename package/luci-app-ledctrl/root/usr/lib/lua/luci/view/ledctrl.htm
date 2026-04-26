@@ -1,0 +1,108 @@
+<%+header%>
+
+<div class="cbi-map">
+  <h2 name="content">LED 控制</h2>
+  <br/>
+  <div class="cbi-section">
+    <div style="margin-bottom:12px">
+      <input type="button" class="cbi-button cbi-button-reset" id="btn-off" value="一键关灯" style="padding:8px 24px;font-size:14px" />
+      <input type="button" class="cbi-button cbi-button-apply" id="btn-default" value="恢复默认" style="padding:8px 24px;font-size:14px" />
+      <span id="led-status" style="margin-left:16px;color:gray"></span>
+    </div>
+    <table class="cbi-section-table" id="led-table">
+      <tr class="cbi-section-table-titles">
+        <th class="cbi-section-table-cell">LED</th>
+        <th class="cbi-section-table-cell">颜色</th>
+        <th class="cbi-section-table-cell">状态</th>
+      </tr>
+      <tr id="led-loading"><td colspan="3" style="text-align:center;color:gray;padding:16px">加载中...</td></tr>
+    </table>
+  </div>
+</div>
+
+<script type="text/javascript">//<![CDATA[
+(function() {
+  var apiBase = '<%=build_url("admin/system/ledctrl/api")%>';
+  var token   = '<%=token%>';
+
+  function apiUrl() {
+    return location.protocol + '//' + location.host + apiBase;
+  }
+
+  function post(action, cb) {
+    var x = new XMLHttpRequest();
+    x.open('POST', apiUrl(), true);
+    x.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+    x.onreadystatechange = function() { if (x.readyState === 4) cb(x); };
+    x.send('action=' + encodeURIComponent(action) + '&token=' + encodeURIComponent(token));
+  }
+
+  function colorOf(name) {
+    var n = name.toLowerCase();
+    if (n.indexOf('green') > -1 || n.indexOf('g1') === 0 || n.indexOf('power') > -1) return '绿';
+    if (n.indexOf('blue')  > -1) return '蓝';
+    if (n.indexOf('red')   > -1 || n.indexOf('orange') > -1) return '红';
+    return name;
+  }
+
+  function render(leds) {
+    var tbl = document.getElementById('led-table');
+    var loading = document.getElementById('led-loading');
+    if (loading) loading.style.display = 'none';
+
+    for (var i = 0; i < leds.length; i++) {
+      var led  = leds[i];
+      var on   = led.on;
+      var st   = on
+        ? '<span style="color:green;font-weight:bold">● 亮</span>'
+        : '<span style="color:gray">○ 灭</span>';
+      var row  = tbl.insertRow(tbl.rows.length);
+      row.className = 'cbi-section-table-row';
+      row.innerHTML =
+        '<td class="cbi-section-table-cell">' + led.name + '</td>' +
+        '<td class="cbi-section-table-cell">' + colorOf(led.name) + '</td>' +
+        '<td class="cbi-section-table-cell">' + st + '</td>';
+    }
+    if (leds.length === 0) {
+      var row = tbl.insertRow(tbl.rows.length);
+      row.innerHTML = '<td colspan="3" style="color:gray;text-align:center;padding:12px">未检测到 LED</td>';
+    }
+  }
+
+  function loadLeds() {
+    var el = document.getElementById('led-status');
+    post('list', function(x) {
+      if (x.status >= 200 && x.status < 300 && x.responseText) {
+        try {
+          var r = JSON.parse(x.responseText);
+          if (r.success) render(r.leds || []);
+        } catch(e) {
+          if (el) el.innerHTML = '数据解析失败';
+        }
+      } else {
+        if (el) el.innerHTML = 'HTTP ' + x.status;
+      }
+    });
+  }
+
+  function doAction(action) {
+    var el = document.getElementById('led-status');
+    if (el) el.innerHTML = '执行中...';
+    post(action, function(x) {
+      if (x.status === 200 || x.status === 204) {
+        if (el) el.innerHTML = '完成，刷新中...';
+        setTimeout(function() { location.reload(); }, 400);
+      } else {
+        if (el) el.innerHTML = '失败: HTTP ' + x.status;
+      }
+    });
+  }
+
+  document.getElementById('btn-off').onclick    = function() { doAction('all_off'); };
+  document.getElementById('btn-default').onclick = function() { doAction('default'); };
+
+  loadLeds();
+})();
+//]]></script>
+
+<%+footer%>
