@@ -1,15 +1,13 @@
-#!/bin/bash
+#!/bin/sh
 
 # ============================================
 # JDCloud AX1800 Pro 固化配置
-# 编译时由 GitHub Actions 自动生成密码哈希
+# 密码哈希由 GitHub Actions 编译时动态生成
 # ============================================
 
-# 设置 ROOT 密码 (sha512crypt)
-# 密码: passwordTsmjg
-# 哈希在编译时由 workflow 动态生成
-ROOT_HASH=$(python3 -c "import crypt; print(crypt.crypt('passwordTsmjg', crypt.mksalt(crypt.METHOD_SHA512)))")
-sed -i "s|^root:.*|root:${ROOT_HASH}:19500:0:99999:7:::|" /etc/shadow
+# 设置 ROOT 密码 (sha512crypt，哈希由编译时生成替换)
+# PLACEHOLDER_PASSWORD_HASH 会被 workflow 替换为实际哈希
+sed -i "s|^root:.*|root:PLACEHOLDER_PASSWORD_HASH:19500:0:99999:7:::|" /etc/shadow
 
 # 设置 LAN IP
 uci set network.lan.ipaddr='192.168.2.1'
