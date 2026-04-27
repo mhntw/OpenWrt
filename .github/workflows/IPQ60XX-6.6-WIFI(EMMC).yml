@@ -75,6 +75,17 @@ jobs:
         VERSION_INFO=$(git show -s --date=short --format="作者: %an<br/>时间: %cd<br/>内容: %s<br/>hash: %H")
         echo "VERSION_INFO=$VERSION_INFO" >> $GITHUB_ENV
 
+    - name: Load Custom Feeds
+      run: |
+        # 根据配置文件选用对应的 feeds 文件
+        CONFIG_BASENAME=$(basename $CONFIG_FILE)
+        if [ -f "$GITHUB_WORKSPACE/feeds/${CONFIG_BASENAME%.config}.default" ]; then
+          cp "$GITHUB_WORKSPACE/feeds/${CONFIG_BASENAME%.config}.default" openwrt/feeds.conf.default
+        elif [ -f "$GITHUB_WORKSPACE/feeds/ipq6000-6.1.default" ]; then
+          cp "$GITHUB_WORKSPACE/feeds/ipq6000-6.1.default" openwrt/feeds.conf.default
+        fi
+        echo "Feeds config loaded for: $CONFIG_BASENAME"
+
     - name: Generate Variables
       run: |
         cp $CONFIG_FILE $OPENWRT_PATH/.config
@@ -99,17 +110,13 @@ jobs:
       run: |
         cd $OPENWRT_PATH
         ./scripts/feeds update -a
+        ./scripts/feeds install -a
 
     - name: Run DIY Script
       run: |
         cd $OPENWRT_PATH
         chmod +x $GITHUB_WORKSPACE/$DIY_SCRIPT
         $GITHUB_WORKSPACE/$DIY_SCRIPT
-
-    - name: Install Feeds Packages
-      run: |
-        cd $OPENWRT_PATH
-        ./scripts/feeds install -a
 
     - name: Load Custom Configuration
       run: |
