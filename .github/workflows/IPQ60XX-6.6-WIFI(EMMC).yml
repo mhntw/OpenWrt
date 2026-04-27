@@ -123,14 +123,21 @@ jobs:
         # 清除所有设备选择，只保留 jdc_ax1800-pro
         sed -i '/^CONFIG_TARGET_DEVICE_qualcommax_ipq60xx_DEVICE_/d' .config
         echo 'CONFIG_TARGET_DEVICE_qualcommax_ipq60xx_DEVICE_jdc_ax1800-pro=y' >> .config
-        # 禁用多设备模式，防止构建其他设备固件
-        sed -i 's/CONFIG_TARGET_MULTI_PROFILE=y/# CONFIG_TARGET_MULTI_PROFILE is not set/' .config
+        # 禁用多设备模式（无论当前值是什么，都强制删除并设置为 not set）
+        sed -i '/^CONFIG_TARGET_MULTI_PROFILE=y/d' .config
+        echo '# CONFIG_TARGET_MULTI_PROFILE is not set' >> .config
         make defconfig
-        grep -E 'DEVICE_jdc_ax1800|MULTI_PROFILE|PARTSIZE' .config || true
+        echo "=== Device config after Force Single ==="
+        grep -E 'DEVICE_|MULTI_PROFILE' .config || true
 
     - name: Download DL Package
       run: |
         cd $OPENWRT_PATH
+        # 每次 make defconfig 可能恢复多设备配置，需重新过滤
+        sed -i '/^CONFIG_TARGET_DEVICE_qualcommax_ipq60xx_DEVICE_/d' .config
+        echo 'CONFIG_TARGET_DEVICE_qualcommax_ipq60xx_DEVICE_jdc_ax1800-pro=y' >> .config
+        sed -i '/^CONFIG_TARGET_MULTI_PROFILE=y/d' .config
+        echo '# CONFIG_TARGET_MULTI_PROFILE is not set' >> .config
         make defconfig
         make download -j8
         find dl -size -1024c -exec ls -l {} \;
@@ -140,6 +147,14 @@ jobs:
       id: compile
       run: |
         cd $OPENWRT_PATH
+        # 最终编译前再次确保只构建 jdc_ax1800-pro
+        sed -i '/^CONFIG_TARGET_DEVICE_qualcommax_ipq60xx_DEVICE_/d' .config
+        echo 'CONFIG_TARGET_DEVICE_qualcommax_ipq60xx_DEVICE_jdc_ax1800-pro=y' >> .config
+        sed -i '/^CONFIG_TARGET_MULTI_PROFILE=y/d' .config
+        echo '# CONFIG_TARGET_MULTI_PROFILE is not set' >> .config
+        make defconfig
+        echo "=== Final device config ==="
+        grep -E 'DEVICE_jdc_ax1800|MULTI_PROFILE|PARTSIZE|TARGET_ROOTFS_PARTSIZE' .config || true
         mkdir -p files/etc/uci-defaults
         cp $GITHUB_WORKSPACE/scripts/init-settings.sh files/etc/uci-defaults/99-init-settings
         chmod +x files/etc/uci-defaults/99-init-settings
