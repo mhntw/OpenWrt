@@ -38,7 +38,6 @@ uci set system.@system[0].hostname='JDCloud-AX1800'
 uci commit system
 
 # 设置默认主题
-uci set luci.main.mediaurlbase='/luci-static/argon'
 uci set luci.main.lang='zh_cn'
 uci commit luci
 
