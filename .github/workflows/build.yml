@@ -37,8 +37,8 @@ jobs:
       fail-fast: false
       matrix:
         PROFILE:
-          - qualcommax-ipq60xx
-          - qualcommax-ipq60xx_emmc
+          - ipq60xx-6.6
+          - ipq60xx-6.6_emmc
 
     steps:
       - name: Maximize disk space
