@@ -38,7 +38,7 @@ jobs:
       matrix:
         PROFILE:
           - ipq60xx-6.6
-          - ipq60xx-6.6_emmc
+          - ipq60xx-6.6-wifi(emmc)
 
     steps:
       - name: Maximize disk space
