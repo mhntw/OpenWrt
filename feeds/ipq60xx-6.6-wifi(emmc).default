@@ -1,0 +1,6 @@
+src-link packages feeds/packages
+src-link luci feeds/luci
+src-link routing feeds/routing
+src-link telephony feeds/telephony
+src-git nss_packages https://github.com/mhntw/nss_packages.git
+src-link custom_package ./package
