@@ -9,12 +9,7 @@
 # TTYD 免登录
 # sed -i 's|/bin/login|/bin/login -f root|g' feeds/packages/utils/ttyd/files/ttyd.config
 
-# 移除要替换的包（用 Argon 替换原版 luci-theme-argon）
-rm -rf feeds/luci/themes/luci-theme-argon
 
-# Argon 主题及配置（config 中已启用）
-git clone --depth=1 -b 18.06 https://github.com/jerrykuku/luci-theme-argon package/luci-theme-argon
-git clone --depth=1 https://github.com/jerrykuku/luci-app-argon-config package/luci-app-argon-config
 
 # 修改版本为编译日期
 date_version=$(date +"%y.%m.%d")
