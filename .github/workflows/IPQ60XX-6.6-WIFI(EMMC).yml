@@ -116,7 +116,7 @@ jobs:
         # 禁用多设备模式，防止构建其他设备固件
         sed -i 's/CONFIG_TARGET_MULTI_PROFILE=y/# CONFIG_TARGET_MULTI_PROFILE is not set/' .config
         make defconfig
-        grep -E 'DEVICE_jdc_ax1800|MULTI_PROFILE' .config || true
+        grep -E 'DEVICE_jdc_ax1800|MULTI_PROFILE|PARTSIZE' .config || true
 
     - name: Download DL Package
       run: |
