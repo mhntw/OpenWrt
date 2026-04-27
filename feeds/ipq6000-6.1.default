@@ -9,3 +9,4 @@ src-git nss_packages https://github.com/JiaY-shi/nss-packages.git
 #src-link custom /usr/src/openwrt/custom-feed
 src-git kenzo https://github.com/kenzok8/openwrt-packages
 src-git small https://github.com/kenzok8/small
+src-git lean https://github.com/coolsnowwolf/lede/trunk/package/lean
