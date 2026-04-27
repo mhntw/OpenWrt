@@ -113,8 +113,10 @@ jobs:
         # 清除所有设备选择，只保留 jdc_ax1800-pro
         sed -i '/^CONFIG_TARGET_DEVICE_qualcommax_ipq60xx_DEVICE_/d' .config
         echo 'CONFIG_TARGET_DEVICE_qualcommax_ipq60xx_DEVICE_jdc_ax1800-pro=y' >> .config
+        # 禁用多设备模式，防止构建其他设备固件
+        sed -i 's/CONFIG_TARGET_MULTI_PROFILE=y/# CONFIG_TARGET_MULTI_PROFILE is not set/' .config
         make defconfig
-        grep -E 'DEVICE_jdc_ax1800|TARGET_DEVICE' .config || true
+        grep -E 'DEVICE_jdc_ax1800|MULTI_PROFILE' .config || true
 
     - name: Download DL Package
       run: |
