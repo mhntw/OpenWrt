@@ -9,6 +9,13 @@ get_sources() {
 
   git clone $BUILD_REPO --single-branch -b $GITHUB_REF_NAME openwrt
 
+  # 根据 BUILD_PROFILE 使用对应的 feeds 文件
+  if [ -f "${GITHUB_WORKSPACE}/feeds/${BUILD_PROFILE}.default" ]; then
+    cp "${GITHUB_WORKSPACE}/feeds/${BUILD_PROFILE}.default" openwrt/feeds.conf.default
+  elif [ -f "${GITHUB_WORKSPACE}/feeds/ipq6000-6.1.default" ]; then
+    cp "${GITHUB_WORKSPACE}/feeds/ipq6000-6.1.default" openwrt/feeds.conf.default
+  fi
+
   cd openwrt
   ./scripts/feeds update -a
   ./scripts/feeds install -a
