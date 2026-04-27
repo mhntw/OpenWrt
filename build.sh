@@ -33,14 +33,17 @@ echo_version() {
 apply_patches() {
   [ -d patches ] || return 0
 
-  dirname $(find patches -type f -name "*.patch") | sort -u | while read -r dir; do
-    local patch_dir="$(realpath $dir)"
-    cd "$(echo $dir | sed 's|^patches/|openwrt/|')"
-    find $patch_dir -type f -name "*.patch" | while read -r patch; do
-      git am $patch
-    done
-    cd -
+  find patches -name "*.patch" | sort | while read -r patch; do
+    patch -p1 -N < "$patch" 2>/dev/null || true
   done
+}
+
+# 运行自定义 DIY 脚本（在 openwrt 目录内执行）
+run_diy_script() {
+  if [ -f "${GITHUB_WORKSPACE}/diy-script.sh" ]; then
+    cp "${GITHUB_WORKSPACE}/diy-script.sh" openwrt/diy-script.sh
+    cd openwrt && chmod +x diy-script.sh && ./diy-script.sh && cd -
+  fi
 }
 
 build_firmware() {
@@ -71,6 +74,7 @@ package_dl_src() {
 get_sources
 echo_version
 apply_patches
+run_diy_script
 build_firmware
 package_binaries
 package_dl_src
