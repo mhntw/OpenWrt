@@ -99,6 +99,16 @@ jobs:
       run: |
         cd $OPENWRT_PATH
         ./scripts/feeds update -a
+
+    - name: Run DIY Script
+      run: |
+        cd $OPENWRT_PATH
+        chmod +x $GITHUB_WORKSPACE/$DIY_SCRIPT
+        $GITHUB_WORKSPACE/$DIY_SCRIPT
+
+    - name: Install Feeds Packages
+      run: |
+        cd $OPENWRT_PATH
         ./scripts/feeds install -a
 
     - name: Load Custom Configuration
