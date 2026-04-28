@@ -112,21 +112,36 @@ jobs:
         ./scripts/feeds update -a
         ./scripts/feeds install -a
 
-    - name: Load Custom Configuration
+    - name: Fix Kconfig Circular Dependency
       run: |
         cd $OPENWRT_PATH
-        [ -e files ] && mv files $OPENWRT_PATH/files
-        [ -e $GITHUB_WORKSPACE/$CONFIG_FILE ] && cp $GITHUB_WORKSPACE/$CONFIG_FILE $OPENWRT_PATH/.config
+        # 打断 kmod-drm-client-lib ↔ LINUX_6_18 循环依赖
+        # LINUX_6_18 内核符号 select PACKAGE_kmod-drm-client-lib，
+        # 而 kmod-drm-client-lib 自身条件也是 @LINUX_6_18，kconfig 报循环
+        for f in $(find package feeds -name 'video.mk' 2>/dev/null); do
+          # kmod-cec-core: DEPENDS @LINUX_6_18 → 整行删掉（单独依赖无意义）
+          sed -i '/^[[:space:]]*DEPENDS.*@LINUX_6_18$/d' "$f"
+          # kmod-cec-core 出现在 +LINUX_6_18: 前缀：去掉条件前缀
+          sed -i 's/+LINUX_6_18:kmod-cec-core//' "$f"
+          # kmod-drm-client-lib: DEPENDS @DISPLAY_SUPPORT @LINUX_6_18 +kmod-xxx → 删 @LINUX_6_18
+          sed -i 's/@DISPLAY_SUPPORT @LINUX_6_18 +kmod/@DISPLAY_SUPPORT +kmod/' "$f"
+          # kmod-drm-mipi-dbi: DEPENDS 末尾有 +LINUX_6_18:kmod-drm-client-lib → 删掉
+          sed -i 's/+LINUX_6_18:kmod-drm-client-lib//' "$f"
+        done
+        echo "=== Kconfig cycle patched ==="
+        grep -n '@LINUX_6_18' package/kernel/linux/modules/video.mk 2>/dev/null || echo "OK: no @LINUX_6_18 left"
+
 
     - name: Force Single Device Build
       run: |
         cd $OPENWRT_PATH
+        [ -e files ] && mv files $OPENWRT_PATH/files
         sed -i '/^CONFIG_TARGET_qualcommax_ipq60xx_DEVICE_/d' .config
         echo 'CONFIG_TARGET_qualcommax_ipq60xx_DEVICE_jdcloud_re-ss-01=y' >> .config
         sed -i '/^CONFIG_TARGET_MULTI_PROFILE=y/d' .config
         make defconfig
         echo "=== Device config after Force Single ==="
-        grep -E 'DEVICE_|MULTI_PROFILE' .config || true
+        grep -E 'DEVICE_jdcloud_re-ss-01|MULTI_PROFILE' .config || true
 
     - name: Download DL Package
       run: |
