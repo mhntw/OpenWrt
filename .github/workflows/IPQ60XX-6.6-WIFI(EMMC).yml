@@ -131,6 +131,49 @@ jobs:
         echo "=== Kconfig cycle patched ==="
         grep -n '@LINUX_6_18' package/kernel/linux/modules/video.mk 2>/dev/null || echo "OK: no @LINUX_6_18 left"
 
+    - name: Fix PROJECT_GIT 404
+      run: |
+        cd $OPENWRT_PATH
+        # git.openwrt.org 返回 404，所有使用 $(PROJECT_GIT) 的包源码下载失败
+        # 修复策略：
+        #   1. 替换 PROJECT_GIT 为 GitHub
+        #   2. 修改 dl_method_git：GitHub URL 也走 git clone（非 github_archive），保持 hash 兼容
+        #   3. URL 路径映射：/project/xxx.git → /xxx.git（GitHub 没有 /project/ 子路径）
+
+        # Step 1: 替换 PROJECT_GIT 定义
+        sed -i 's|^PROJECT_GIT = https://git.openwrt.org|PROJECT_GIT = https://github.com/openwrt|' include/download.mk
+        echo "=== PROJECT_GIT patched ==="
+        grep 'PROJECT_GIT' include/download.mk | head -3
+
+        # Step 2: 修改 dl_method_git — GitHub URL 强制走 git clone 而非 github_archive
+        # 原始行26: $(if $(filter https://github.com/% git://github.com/%,$(1)),github_archive,git)
+        # 修改后: git  （始终走 git clone，保持与原 git.openwrt.org 下载方式一致，hash 兼容）
+        # 注意：此修改会影响所有 GitHub 来源的包，但对 CI 编译环境来说 git clone 是可靠的
+        # 用 perl 替换 dl_method_git 块内容，将 github_archive 改为 git
+        # 原始: $(if $(filter https://github.com/% git://github.com/%,$(1)),github_archive,git)
+        # 修改后: git  （始终走 git clone）
+        perl -0777 -pi -e 's/define dl_method_git\n.*?\nendef/define dl_method_git\ngit\nendef/s' include/download.mk
+        echo "=== dl_method_git patched ==="
+        grep -A2 'dl_method_git' include/download.mk | head -5
+
+        # Step 3: URL 路径映射 — /project/xxx.git → /xxx.git
+        # GitHub 上 openwrt org 的仓库结构是 openwrt/xxx，没有 /project/ 中间路径
+        # 需要修改所有引用 $(PROJECT_GIT)/project/ 的 Makefile
+        # 用 perl 替代 sed 避免 shell 对 $( 的解释问题
+        # 主仓库包
+        find package -name Makefile -exec grep -l 'PROJECT_GIT)/project/' {} \; | while read f; do
+          perl -pi -e 's|\$\(PROJECT_GIT\)/project/|\$\(PROJECT_GIT\)/|g' "$f"
+        done
+        # feeds 包
+        find feeds -name Makefile -exec grep -l 'PROJECT_GIT)/project/' {} \; 2>/dev/null | while read f; do
+          perl -pi -e 's|\$\(PROJECT_GIT\)/project/|\$\(PROJECT_GIT\)/|g' "$f"
+        done
+        echo "=== URL path mapping applied ==="
+        # 验证：确认没有残留的 /project/ 引用
+        grep -r 'PROJECT_GIT)/project/' package feeds --include=Makefile 2>/dev/null | head -5 || echo "OK: no /project/ residue"
+        # 显示受影响的包数量
+        COUNT=$(grep -rl 'PROJECT_GIT)' package feeds --include=Makefile 2>/dev/null | wc -l)
+        echo "Total Makefiles using PROJECT_GIT: $COUNT"
 
     - name: Force Single Device Build
       run: |
@@ -147,8 +190,17 @@ jobs:
       run: |
         cd $OPENWRT_PATH
         make download -j8
+        # 检查是否有下载失败的包（dl 中存在空文件或小于 1KB 的文件）
+        FAILED=$(find dl -size -1024c -not -empty 2>/dev/null | wc -l)
+        EMPTY=$(find dl -empty 2>/dev/null | wc -l)
+        echo "=== Download check: ${FAILED} incomplete files, ${EMPTY} empty files ==="
         find dl -size -1024c -exec ls -l {} \;
         find dl -size -1024c -exec rm -f {} \;
+        # 如果有大量下载失败，终止构建避免浪费时间编译
+        if [ "$FAILED" -gt 5 ]; then
+          echo "❌ Too many download failures (${FAILED}), aborting build"
+          exit 1
+        fi
 
     - name: Compile Firmware
       id: compile
