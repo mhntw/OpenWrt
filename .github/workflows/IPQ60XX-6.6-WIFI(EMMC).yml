@@ -127,15 +127,15 @@ jobs:
       run: |
         cd $OPENWRT_PATH
         make defconfig
-        # 清除所有设备选择，只保留 jdc_ax1800-pro
+        # 清除所有设备选择，只保留 jdcloud_re-ss-01
         # 注意：IPQ60xx 6.6 内核使用 CONFIG_TARGET_board_subtarget_DEVICE_ 前缀（无中间 DEVICE_）
         sed -i '/^CONFIG_TARGET_qualcommax_ipq60xx_DEVICE_/d' .config
-        echo 'CONFIG_TARGET_qualcommax_ipq60xx_DEVICE_jdc_ax1800-pro=y' >> .config
+        echo 'CONFIG_TARGET_qualcommax_ipq60xx_DEVICE_jdcloud_re-ss-01=y' >> .config
         # 禁用多设备模式（无论当前值是什么，都强制删除并设置为 not set）
         sed -i '/^CONFIG_TARGET_MULTI_PROFILE=y/d' .config
         echo '# CONFIG_TARGET_MULTI_PROFILE is not set' >> .config
         # 修正 TARGET_PROFILE 指向正确的设备
-        sed -i 's|^CONFIG_TARGET_PROFILE=.*|CONFIG_TARGET_PROFILE="DEVICE_jdc_ax1800-pro"|' .config
+        sed -i 's|^CONFIG_TARGET_PROFILE=.*|CONFIG_TARGET_PROFILE="DEVICE_jdcloud_re-ss-01"|' .config
         make defconfig
         echo "=== Device config after Force Single ==="
         grep -E 'DEVICE_|MULTI_PROFILE' .config || true
@@ -145,7 +145,7 @@ jobs:
         cd $OPENWRT_PATH
         # 每次 make defconfig 可能恢复多设备配置，需重新过滤
         sed -i '/^CONFIG_TARGET_qualcommax_ipq60xx_DEVICE_/d' .config
-        echo 'CONFIG_TARGET_qualcommax_ipq60xx_DEVICE_jdc_ax1800-pro=y' >> .config
+        echo 'CONFIG_TARGET_qualcommax_ipq60xx_DEVICE_jdcloud_re-ss-01=y' >> .config
         sed -i '/^CONFIG_TARGET_MULTI_PROFILE=y/d' .config
         echo '# CONFIG_TARGET_MULTI_PROFILE is not set' >> .config
         make defconfig
@@ -157,9 +157,9 @@ jobs:
       id: compile
       run: |
         cd $OPENWRT_PATH
-        # 最终编译前再次确保只构建 jdc_ax1800-pro
+        # 最终编译前再次确保只构建 jdcloud_re-ss-01
         sed -i '/^CONFIG_TARGET_qualcommax_ipq60xx_DEVICE_/d' .config
-        echo 'CONFIG_TARGET_qualcommax_ipq60xx_DEVICE_jdc_ax1800-pro=y' >> .config
+        echo 'CONFIG_TARGET_qualcommax_ipq60xx_DEVICE_jdcloud_re-ss-01=y' >> .config
         sed -i '/^CONFIG_TARGET_MULTI_PROFILE=y/d' .config
         echo '# CONFIG_TARGET_MULTI_PROFILE is not set' >> .config
         make defconfig
