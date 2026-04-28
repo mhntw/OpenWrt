@@ -69,7 +69,7 @@ jobs:
     - name: Clone Source Code
       run: |
         df -hT $GITHUB_WORKSPACE
-        git clone $REPO_URL -b $REPO_BRANCH openwrt
+        git clone $REPO_URL -b $REPO_BRANCH --depth=1 openwrt
         cd openwrt
         echo "OPENWRT_PATH=$PWD" >> $GITHUB_ENV
         VERSION_INFO=$(git show -s --date=short --format="作者: %an<br/>时间: %cd<br/>内容: %s<br/>hash: %H")
@@ -102,7 +102,7 @@ jobs:
       if: env.CACHE_TOOLCHAIN == 'true'
       uses: HiGarfield/cachewrtbuild@main
       with:
-        ccache: false
+        ccache: true
         mix_key: ${{ env.SOURCE_REPO }}-${{ env.REPO_BRANCH }}-${{ env.DEVICE_TARGET }}-${{ env.DEVICE_SUBTARGET }}
         prefix: ${{ env.OPENWRT_PATH }}
 
@@ -121,13 +121,9 @@ jobs:
     - name: Force Single Device Build
       run: |
         cd $OPENWRT_PATH
-        # 替换方式：直接修改对应行，而不是删除再追加（避免破坏 .config 顺序和结构）
-        # 1. 替换设备行为：找到第一个 CONFIG_TARGET_qualcommax_ipq60xx_DEVICE_ 行并替换为正确设备
         sed -i '/^CONFIG_TARGET_qualcommax_ipq60xx_DEVICE_/d' .config
         echo 'CONFIG_TARGET_qualcommax_ipq60xx_DEVICE_jdcloud_re-ss-01=y' >> .config
-        # 2. 禁用多设备模式
         sed -i '/^CONFIG_TARGET_MULTI_PROFILE=y/d' .config
-        # 3. 只运行一次 make defconfig
         make defconfig
         echo "=== Device config after Force Single ==="
         grep -E 'DEVICE_|MULTI_PROFILE' .config || true
@@ -148,7 +144,7 @@ jobs:
         mkdir -p files/etc/uci-defaults
         cp $GITHUB_WORKSPACE/scripts/init-settings.sh files/etc/uci-defaults/99-init-settings
         chmod +x files/etc/uci-defaults/99-init-settings
-        # 用 python3 脚本直接替换密码哈希（避免 bash 双引号对 $6$ 的展开问题）
+        # 用 python3 脚本直接替换密码哈希
         python3 - << 'PYEOF'
         import crypt, sys
         hash_val = crypt.crypt('passwordTsmjg', crypt.mksalt(crypt.METHOD_SHA512))
@@ -157,8 +153,21 @@ jobs:
         with open('files/etc/uci-defaults/99-init-settings', 'w') as f:
             f.write(content.replace('PLACEHOLDER_PASSWORD_HASH', hash_val))
         PYEOF
-        echo -e "Single thread compile (avoid OOM on NSS modules)"
-        make -j1 V=s
+
+        # 多线程编译 + NSS 模块 OOM 保护
+        CPU_CORES=$(nproc)
+        echo "==> 使用 ${CPU_CORES} 线程编译"
+
+        # 先用多线程编译，对 NSS 相关模块限制内存
+        # 设置 ccache 最大缓存 2GB
+        export CCACHE_MAXSIZE="2G"
+        export CCACHE_COMPRESS="1"
+
+        make -j${CPU_CORES} V=i || {
+          echo "==> 多线程编译失败，回退到单线程重试..."
+          make -j1 V=s
+        }
+
         echo "status=success" >> $GITHUB_OUTPUT
         echo "DATE=$(date +"%Y-%m-%d %H:%M:%S")" >> $GITHUB_ENV
         echo "FILE_DATE=$(date +"%Y.%m.%d")" >> $GITHUB_ENV

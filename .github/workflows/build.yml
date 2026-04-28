@@ -22,7 +22,6 @@ jobs:
         - /usr/local:/usr/local
         - /usr/lib/google-cloud-sdk:/usr/lib/google-cloud-sdk
         - /usr/share/dotnet:/usr/share/dotnet
-        - /usr/share/swift:/usr/share/swift
         - /opt/az:/opt/az
         - /opt/google:/opt/google
         - /opt/microsoft:/opt/microsoft
@@ -50,6 +49,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: true
+          fetch-depth: 1
 
       - name: Make build cache
         uses: actions/cache@v4

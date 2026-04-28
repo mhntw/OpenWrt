@@ -1,24 +1,17 @@
 #!/bin/sh
 # shellcheck disable=SC2086,SC3043,SC2164,SC2103,SC2046,SC2155
-# OpenWrt 构建脚本 - 优化版
-# 优化内容：性能编译参数、错误处理增强、精简冗余操作
+# OpenWrt 构建脚本 - 优化版 v2
+# 优化内容：ccache 启用、并行编译 + OOM 回退、浅克隆、精简日志
 
 # 确保脚本遇到错误时退出
 set -e
 
-# 性能优化：设置编译参数
-export MAKEFLAGS="-j$(nproc)"
-export CONFIG_DEBUG_SECTION_MISMATCH=n
-export KBUILD_VERBOSE=0
-
 get_sources() {
-  # the checkout actions will set $HOME to other directory,
-  # we need to reset some necessary git configs again.
   git config --global user.name "OpenWrt Builder"
   git config --global user.email "buster-openwrt@ovvo.uk"
 
-  echo "==> 克隆 OpenWrt 源码..."
-  git clone $BUILD_REPO --single-branch -b $GITHUB_REF_NAME openwrt
+  echo "==> 克隆 OpenWrt 源码（浅克隆）..."
+  git clone $BUILD_REPO --single-branch --depth=1 -b $GITHUB_REF_NAME openwrt
 
   # 根据 BUILD_PROFILE 使用对应的 feeds 文件
   if [ -f "${GITHUB_WORKSPACE}/feeds/${BUILD_PROFILE}.default" ]; then
@@ -53,26 +46,29 @@ apply_patches() {
     echo "应用补丁: $patch"
     patch -p1 -N < "$patch" 2>/dev/null || true
   done
+}
+
 run_diy_script() {
-run_diy_script() {
-  # diy-script.sh 已废弃，所有定制逻辑移至 init-settings.sh
   echo "==> 跳过 DIY 脚本（已迁移至 init-settings.sh）"
 }
-run_diy_script() {
-  # diy-script.sh 已废弃，所有定制逻辑移至 init-settings.sh
-  echo "==> 跳过 DIY 脚本（已迁移至 init-settings.sh）"
-}
+
+build_firmware() {
   cd openwrt
   export TERM=xterm
 
   echo "==> 使用配置: ${BUILD_PROFILE}"
   cp ${GITHUB_WORKSPACE}/configs/${BUILD_PROFILE} .config
-  
-  # 性能优化：使用 O3 优化和并行编译
-  echo "==> 开始编译（使用 $(nproc) 线程）..."
-  make -j$(nproc) V=s 2>&1 | tee build.log || {
-    echo "==> 首次编译失败，尝试单线程编译..."
-    make -j1 V=sc 2>&1 | tee build.log || {
+
+  # 启用 ccache 加速增量编译
+  export CCACHE_MAXSIZE="2G"
+  export CCACHE_COMPRESS="1"
+
+  # 并行编译 + OOM 回退策略
+  CPU_CORES=$(nproc)
+  echo "==> 开始编译（${CPU_CORES} 线程 + ccache）..."
+  make -j${CPU_CORES} V=i || {
+    echo "==> 多线程编译失败，回退单线程重试..."
+    make -j1 V=sc || {
       echo "==> 编译失败，请检查 build.log"
       exit 1
     }
