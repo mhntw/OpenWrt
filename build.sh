@@ -53,18 +53,15 @@ apply_patches() {
     echo "应用补丁: $patch"
     patch -p1 -N < "$patch" 2>/dev/null || true
   done
-}
-
-# 运行自定义 DIY 脚本（在 openwrt 目录内执行）
 run_diy_script() {
-  if [ -f "${GITHUB_WORKSPACE}/diy-script.sh" ]; then
-    echo "==> 运行 DIY 脚本..."
-    cp "${GITHUB_WORKSPACE}/diy-script.sh" openwrt/diy-script.sh
-    cd openwrt && chmod +x diy-script.sh && ./diy-script.sh && cd -
-  fi
+run_diy_script() {
+  # diy-script.sh 已废弃，所有定制逻辑移至 init-settings.sh
+  echo "==> 跳过 DIY 脚本（已迁移至 init-settings.sh）"
 }
-
-build_firmware() {
+run_diy_script() {
+  # diy-script.sh 已废弃，所有定制逻辑移至 init-settings.sh
+  echo "==> 跳过 DIY 脚本（已迁移至 init-settings.sh）"
+}
   cd openwrt
   export TERM=xterm
 
