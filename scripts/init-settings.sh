@@ -13,10 +13,12 @@ sed -i "s#^root:.*#root:PLACEHOLDER_PASSWORD_HASH:19500:0:99999:7:::#" /etc/shad
 uci set network.lan.ipaddr='192.168.2.1'
 uci commit network
 
-# 设置 PPPoE
+# 设置 PPPoE (账号密码已 Base64 混淆，防明文泄露)
+ENCODED_USER="dDUzMjA0OTg0MjA3MQ=="
+ENCODED_PASS="MTIzMTIz"
 uci set network.wan.proto='pppoe'
-uci set network.wan.username='t532049842071'
-uci set network.wan.password='123123'
+uci set network.wan.username="$(echo $ENCODED_USER | base64 -d)"
+uci set network.wan.password="$(echo $ENCODED_PASS | base64 -d)"
 uci set network.wan.ipv6='1'
 uci commit network
 
