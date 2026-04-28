@@ -7,7 +7,7 @@
 
 # 设置 ROOT 密码 (sha512crypt，哈希由编译时生成替换)
 # PLACEHOLDER_PASSWORD_HASH 会被 workflow 替换为实际哈希
-sed -i "s|^root:.*|root:PLACEHOLDER_PASSWORD_HASH:19500:0:99999:7:::|" /etc/shadow
+sed -i "s#^root:.*#root:PLACEHOLDER_PASSWORD_HASH:19500:0:99999:7:::#" /etc/shadow
 
 # 设置 LAN IP
 uci set network.lan.ipaddr='192.168.2.1'
