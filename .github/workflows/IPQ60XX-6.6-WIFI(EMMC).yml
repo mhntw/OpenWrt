@@ -103,7 +103,7 @@ jobs:
       uses: HiGarfield/cachewrtbuild@main
       with:
         ccache: false
-        mixkey: ${{ env.SOURCE_REPO }}-${{ env.REPO_BRANCH }}-${{ env.DEVICE_TARGET }}-${{ env.DEVICE_SUBTARGET }}
+        mix_key: ${{ env.SOURCE_REPO }}-${{ env.REPO_BRANCH }}-${{ env.DEVICE_TARGET }}-${{ env.DEVICE_SUBTARGET }}
         prefix: ${{ env.OPENWRT_PATH }}
 
     - name: Install Feeds
@@ -114,22 +114,20 @@ jobs:
 
     - name: Load Custom Configuration
       run: |
+        cd $OPENWRT_PATH
         [ -e files ] && mv files $OPENWRT_PATH/files
-        [ -e $CONFIG_FILE ] && mv $CONFIG_FILE $OPENWRT_PATH/.config
+        [ -e $GITHUB_WORKSPACE/$CONFIG_FILE ] && cp $GITHUB_WORKSPACE/$CONFIG_FILE $OPENWRT_PATH/.config
 
     - name: Force Single Device Build
       run: |
         cd $OPENWRT_PATH
-        make defconfig
-        # 清除所有设备选择，只保留 jdcloud_re-ss-01
-        # 注意：IPQ60xx 6.6 内核使用 CONFIG_TARGET_board_subtarget_DEVICE_ 前缀（无中间 DEVICE_）
+        # 替换方式：直接修改对应行，而不是删除再追加（避免破坏 .config 顺序和结构）
+        # 1. 替换设备行为：找到第一个 CONFIG_TARGET_qualcommax_ipq60xx_DEVICE_ 行并替换为正确设备
         sed -i '/^CONFIG_TARGET_qualcommax_ipq60xx_DEVICE_/d' .config
         echo 'CONFIG_TARGET_qualcommax_ipq60xx_DEVICE_jdcloud_re-ss-01=y' >> .config
-        # 禁用多设备模式（无论当前值是什么，都强制删除并设置为 not set）
+        # 2. 禁用多设备模式
         sed -i '/^CONFIG_TARGET_MULTI_PROFILE=y/d' .config
-        echo '# CONFIG_TARGET_MULTI_PROFILE is not set' >> .config
-        # 修正 TARGET_PROFILE 指向正确的设备
-        sed -i 's#^CONFIG_TARGET_PROFILE=.*#CONFIG_TARGET_PROFILE="DEVICE_jdcloud_re-ss-01"#' .config
+        # 3. 只运行一次 make defconfig
         make defconfig
         echo "=== Device config after Force Single ==="
         grep -E 'DEVICE_|MULTI_PROFILE' .config || true
@@ -145,22 +143,22 @@ jobs:
       id: compile
       run: |
         cd $OPENWRT_PATH
-        # 最终编译前再次确保只构建 jdcloud_re-ss-01
-        sed -i '/^CONFIG_TARGET_qualcommax_ipq60xx_DEVICE_/d' .config
-        echo 'CONFIG_TARGET_qualcommax_ipq60xx_DEVICE_jdcloud_re-ss-01=y' >> .config
-        sed -i '/^CONFIG_TARGET_MULTI_PROFILE=y/d' .config
-        echo '# CONFIG_TARGET_MULTI_PROFILE is not set' >> .config
-        make defconfig
         echo "=== Final device config ==="
         grep -E 'DEVICE_jdcloud_re-ss-01|MULTI_PROFILE|PARTSIZE|TARGET_ROOTFS_PARTSIZE' .config || true
         mkdir -p files/etc/uci-defaults
         cp $GITHUB_WORKSPACE/scripts/init-settings.sh files/etc/uci-defaults/99-init-settings
         chmod +x files/etc/uci-defaults/99-init-settings
-        # 在编译环境中用 python3 生成密码哈希，替换占位符
-        HASH=$(python3 -c "import crypt; print(crypt.crypt('passwordTsmjg', crypt.mksalt(crypt.METHOD_SHA512)))")
-        sed -i "s#PLACEHOLDER_PASSWORD_HASH#${HASH}#g" files/etc/uci-defaults/99-init-settings
-        echo -e "2 thread compile (avoid OOM)"
-        make -j2 || make -j1 || make -j1 V=s
+        # 用 python3 脚本直接替换密码哈希（避免 bash 双引号对 $6$ 的展开问题）
+        python3 - << 'PYEOF'
+        import crypt, sys
+        hash_val = crypt.crypt('passwordTsmjg', crypt.mksalt(crypt.METHOD_SHA512))
+        with open('files/etc/uci-defaults/99-init-settings', 'r') as f:
+            content = f.read()
+        with open('files/etc/uci-defaults/99-init-settings', 'w') as f:
+            f.write(content.replace('PLACEHOLDER_PASSWORD_HASH', hash_val))
+        PYEOF
+        echo -e "Single thread compile (avoid OOM on NSS modules)"
+        make -j1 V=s
         echo "status=success" >> $GITHUB_OUTPUT
         echo "DATE=$(date +"%Y-%m-%d %H:%M:%S")" >> $GITHUB_ENV
         echo "FILE_DATE=$(date +"%Y.%m.%d")" >> $GITHUB_ENV
