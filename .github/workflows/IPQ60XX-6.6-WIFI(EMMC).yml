@@ -164,7 +164,7 @@ jobs:
         echo '# CONFIG_TARGET_MULTI_PROFILE is not set' >> .config
         make defconfig
         echo "=== Final device config ==="
-        grep -E 'DEVICE_jdc_ax1800|MULTI_PROFILE|PARTSIZE|TARGET_ROOTFS_PARTSIZE' .config || true
+        grep -E 'DEVICE_jdcloud_re-ss-01|MULTI_PROFILE|PARTSIZE|TARGET_ROOTFS_PARTSIZE' .config || true
         mkdir -p files/etc/uci-defaults
         cp $GITHUB_WORKSPACE/scripts/init-settings.sh files/etc/uci-defaults/99-init-settings
         chmod +x files/etc/uci-defaults/99-init-settings
