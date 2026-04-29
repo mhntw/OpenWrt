@@ -55,6 +55,7 @@ jobs:
         # CMake 4.x 不兼容 cmake_minimum_required(VERSION < 3.5)
         # 降级到 3.31.6 以兼容所有 OpenWrt 包
         wget -qO- https://github.com/Kitware/CMake/releases/download/v3.31.6/cmake-3.31.6-linux-x86_64.tar.gz | tar xz -C /tmp
+        export PATH="/tmp/cmake-3.31.6-linux-x86_64/bin:$PATH"
         echo "PATH=/tmp/cmake-3.31.6-linux-x86_64/bin:$PATH" >> $GITHUB_ENV
         cmake --version
 
