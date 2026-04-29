@@ -155,15 +155,17 @@ jobs:
         echo "=== URL path mapping applied ==="
 
         # Step 3: 跳过 hash 校验
-        # 把使用 PROJECT_GIT 的包的 PKG_HASH/PKG_MIRROR_HASH 替换为 skip
-        # PKG_HASH/PKG_MIRROR_HASH 在 Makefile 中定义，通常是 64 字符的 sha256 hash
-        for f in $(grep -rl 'PROJECT_GIT)' package feeds --include=Makefile 2>/dev/null); do
-          # 替换 PKG_HASH := xxx 或 PKG_HASH=xxx 为 PKG_HASH := skip
-          sed -i -E 's/PKG_HASH\s*[:=]+\s*[a-f0-9]{64}/PKG_HASH := skip/g' "$f"
-          # 替换 PKG_MIRROR_HASH
-          sed -i -E 's/PKG_MIRROR_HASH\s*[:=]+\s*[a-f0-9]{64}/PKG_MIRROR_HASH := skip/g' "$f"
+        # 把所有 GitHub 来源的包的 PKG_HASH/PKG_MIRROR_HASH 替换为 skip
+        # （不只是 PROJECT_GIT 的包，也包括 jow-/xxx.git 等其他 GitHub 仓库）
+        for f in $(find package feeds -name Makefile 2>/dev/null); do
+          if grep -q 'github\.com' "$f"; then
+            # 替换 PKG_HASH := xxx 或 PKG_HASH=xxx 为 PKG_HASH := skip
+            sed -i -E 's/PKG_HASH\s*[:=]+\s*[a-f0-9]{64}/PKG_HASH := skip/g' "$f"
+            # 替换 PKG_MIRROR_HASH
+            sed -i -E 's/PKG_MIRROR_HASH\s*[:=]+\s*[a-f0-9]{64}/PKG_MIRROR_HASH := skip/g' "$f"
+          fi
         done
-        echo "=== Hash check bypassed ==="
+        echo "=== Hash check bypassed for all GitHub packages ==="
         echo "Modified files:"
         grep -l 'PKG_HASH := skip' package feeds --include=Makefile -r 2>/dev/null | wc -l
 
