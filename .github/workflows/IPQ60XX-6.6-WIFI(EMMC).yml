@@ -16,6 +16,9 @@ env:
   FIRMWARE_RELEASE: true
   FIRMWARE_TAG: IPQ60XX-6.6-WIFI(EMMC)
   TZ: Asia/Shanghai
+  # OpenWrt 编译自己的 CMake (3.27+)，已移除 cmake_minimum_required < 3.5 兼容
+  # 设置此变量让 CMake 自动将旧版声明视为 3.5
+  CMAKE_POLICY_VERSION_MINIMUM: "3.5"
 
 jobs:
   Build:
@@ -49,15 +52,6 @@ jobs:
         sudo -E apt-get -y autoremove --purge
         sudo -E apt-get -y clean
         sudo timedatectl set-timezone "$TZ"
-
-    - name: Install CMake 3.10.3
-      run: |
-        # CMake 3.5 以下版本已不被 3.31.6 支持，会报兼容性错误
-        # 降级到 3.10.3 最后支持 cmake_minimum_required < 3.5 的版本
-        wget -qO- https://github.com/Kitware/CMake/releases/download/v3.10.3/cmake-3.10.3-Linux-x86_64.tar.gz | tar xz -C /tmp
-        export PATH="/tmp/cmake-3.10.3-Linux-x86_64/bin:$PATH"
-        echo "PATH=/tmp/cmake-3.10.3-Linux-x86_64/bin:$PATH" >> $GITHUB_ENV
-        cmake --version
 
     - name: Combine Disks
       uses: easimon/maximize-build-space@master
@@ -172,47 +166,21 @@ jobs:
         echo "Modified files:"
         grep -l 'PKG_HASH := skip' package feeds --include=Makefile -r 2>/dev/null | wc -l
 
-        # Step 4: 修复 lucihttp CMake 版本兼容性
-        # CMake 4.x 移除了对 cmake_minimum_required < 3.5 的兼容
-        # lucihttp 源码包里的 CMakeLists.txt 使用了 VERSION 2.6
-        # 正确做法：在 feeds 包的 patches/ 目录注入 patch，
-        # OpenWrt 构建系统会在解压源码后自动 quilt apply
-        LUCIHTTP_PKG=$(find feeds -type d -name 'lucihttp' 2>/dev/null | head -1)
-        if [ -n "$LUCIHTTP_PKG" ]; then
-          mkdir -p "$LUCIHTTP_PKG/patches"
-          printf '%s' "LS0tIGEvQ01ha2VMaXN0cy50eHQKKysrIGIvQ01ha2VMaXN0cy50eHQKQEAgLTEsNCArMSw0IEBACi1jbWFrZV9taW5pbXVtX3JlcXVpcmVkKFZFUlNJT04gMi42KQorY21ha2VfbWluaW11bV9yZXF1aXJlZChWRVJTSU9OIDMuMTApCgogUFJPSkVDVChsaWJsdWNpaHR0cCBDKQo=" | base64 -d > "$LUCIHTTP_PKG/patches/001-cmake-compat.patch"
-          echo "=== lucihttp cmake compat patch injected ==="
-          ls "$LUCIHTTP_PKG/patches/"
-        else
-          echo "WARNING: lucihttp package dir not found in feeds"
-        fi
-        echo "=== CMake compatibility patched ==="
-
-        # Step5: 修复所有旧版 cmake_minimum_required (< 3.5) 导致编译失败
-        # CMake 3.31+ 移除了对 < 3.5 的兼容，直接修改 dl/ 目录中源码 tarball
+        # Step 4: 修复 feeds 中内联源码的 cmake_minimum_required < 3.5
+        # OpenWrt 构建自己的 CMake (3.27+)，已移除 < 3.5 兼容
+        # CMAKE_POLICY_VERSION_MINIMUM=3.5 环境变量可处理下载的 tarball 源码
+        # 但 feeds 中的内联源码 (src/ 目录) 需要直接修改
         cd $OPENWRT_PATH
-        find dl -name '*.tar.xz' -size +1k 2>/dev/null | head -100 | while read tarball; do
-          tmpdir=$(mktemp -d)
-          tar xf "$tarball" -C "$tmpdir" 2>/dev/null || { rm -rf "$tmpdir"; continue; }
-          for cm in $(find "$tmpdir" -name CMakeLists.txt 2>/dev/null); do
-            oldver=$(grep 'cmake_minimum_required' "$cm" 2>/dev/null | grep -oP 'VERSION\\s+\\K[0-9.]+' | head -1)
-            if [ -n "$oldver" ]; then
-              maj=${oldver%%.*}
-              if [ "$maj" -lt 3 ] 2>/dev/null; then
-                echo "Upgrading $tarball: cmake $oldver -> 3.10"
-                perl -pi -e 's/cmake_minimum_required\\(VERSION\\s+[0-9.]+\\)/cmake_minimum_required(VERSION 3.10)/' "$cm"
-              fi
-            fi
-          done
-          srcdir=$(find "$tmpdir" -mindepth 1 -maxdepth 1 -type d | head -1)
-          if [ -n "$srcdir" ]; then
-            rm -f "$tarball"
-            tar cf - -C "$(dirname "$srcdir")" "$(basename "$srcdir")" | xz > "$tarball.tmp"
-            mv "$tarball.tmp" "$tarball"
+        FIXED=0
+        for cm in $(find feeds -name CMakeLists.txt 2>/dev/null); do
+          if grep -qP 'cmake_minimum_required\(VERSION\s+[0-2]\.' "$cm" 2>/dev/null; then
+            oldver=$(grep -oP 'cmake_minimum_required\(VERSION\s+\K[0-9.]+' "$cm" | head -1)
+            echo "Fixing $cm: cmake $oldver -> 3.10"
+            sed -i 's/cmake_minimum_required(VERSION\s*[0-9.]\+)/cmake_minimum_required(VERSION 3.10)/' "$cm"
+            FIXED=$((FIXED+1))
           fi
-          rm -rf "$tmpdir"
         done
-        echo "=== All CMake fixes applied ==="
+        echo "=== Fixed $FIXED inline CMakeLists.txt files ==="
 
     - name: Force Single Device Build
       run: |
