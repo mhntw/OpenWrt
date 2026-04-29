@@ -241,6 +241,42 @@ jobs:
           exit 1
         fi
 
+    - name: Fix All CMake Version Compatibility
+      run: |
+        # 在 make download 之后、make compile 之前
+        # 修复 dl/ 中所有源码包里旧版 cmake_minimum_required (< 3.5)
+        # rpcd-mod-luci 等包源码里 cmake_minimum_required(VERSION 3.4) 会导致 CMake 3.10 报错
+        cd $OPENWRT_PATH
+        echo "=== Patching CMakeLists.txt in downloaded sources ==="
+        find dl -name '*.tar.xz' -size +1k 2>/dev/null | while read tarball; do
+          tmpdir=$(mktemp -d)
+          tar xf "$tarball" -C "$tmpdir" 2>/dev/null || { rm -rf "$tmpdir"; continue; }
+          srcdir=$(find "$tmpdir" -mindepth 1 -maxdepth 1 -type d | head -1)
+          if [ -n "$srcdir" ]; then
+            found=0
+            for cm in $(find "$srcdir" -name CMakeLists.txt 2>/dev/null); do
+              # 匹配 cmake_minimum_required(VERSION X.Y) 且 X.Y < 3.5
+              if grep -q 'cmake_minimum_required' "$cm" 2>/dev/null; then
+                oldline=$(grep 'cmake_minimum_required' "$cm" 2>/dev/null | head -1)
+                # perl: 只改 VERSION 数字部分 < 3.5 的行
+                perl -pi -e 's/cmake_minimum_required\(VERSION\s+([0-9]+)\.([0-9]+)\)/my($m,$n)=($1,$2); ($m<3||($m==3&&$n<5))?"cmake_minimum_required(VERSION 3.10)":$&/e' "$cm"
+                newline=$(grep 'cmake_minimum_required' "$cm" 2>/dev/null | head -1)
+                if [ "$oldline" != "$newline" ]; then
+                  echo "Patched: $tarball ($(basename "$srcdir")): $oldline -> $newline"
+                  found=1
+                fi
+              fi
+            done
+            if [ "$found" = "1" ]; then
+              rm -f "$tarball"
+              tar cf - -C "$(dirname "$srcdir")" "$(basename "$srcdir")" | xz > "$tarball.tmp"
+              mv "$tarball.tmp" "$tarball"
+            fi
+          fi
+          rm -rf "$tmpdir"
+        done
+        echo "=== CMake compatibility patches applied ==="
+
     - name: Compile Firmware
       id: compile
       run: |
