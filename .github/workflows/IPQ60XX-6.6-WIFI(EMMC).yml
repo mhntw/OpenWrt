@@ -155,38 +155,43 @@ jobs:
         echo "=== URL path mapping applied ==="
 
         # Step 3: 跳过 hash 校验
-        # 把所有 GitHub 来源的包的 PKG_HASH/PKG_MIRROR_HASH 替换为 skip
-        # （不只是 PROJECT_GIT 的包，也包括 jow-/xxx.git 等其他 GitHub 仓库）
+        # 把所有 GitHub/git 来源的包的 PKG_HASH/PKG_MIRROR_HASH 替换为 skip
+        # 注意：hash 长度可能是 56~70 位（sha256=64, sha512=128, 部分截断），用宽松匹配
         for f in $(find package feeds -name Makefile 2>/dev/null); do
-          if grep -q 'github\.com' "$f"; then
-            # 替换 PKG_HASH := xxx 或 PKG_HASH=xxx 为 PKG_HASH := skip
-            sed -i -E 's/PKG_HASH\s*[:=]+\s*[a-f0-9]{64}/PKG_HASH := skip/g' "$f"
-            # 替换 PKG_MIRROR_HASH
-            sed -i -E 's/PKG_MIRROR_HASH\s*[:=]+\s*[a-f0-9]{64}/PKG_MIRROR_HASH := skip/g' "$f"
+          if grep -qE 'github\.com|PKG_SOURCE_PROTO\s*:?=\s*git' "$f"; then
+            # 替换 PKG_HASH := xxx 或 PKG_HASH=xxx 为 PKG_HASH := skip（56~70位hex）
+            sed -i -E 's/PKG_HASH\s*[:=]+\s*[a-f0-9]{56,128}/PKG_HASH := skip/g' "$f"
+            # 替换 PKG_MIRROR_HASH（同理）
+            sed -i -E 's/PKG_MIRROR_HASH\s*[:=]+\s*[a-f0-9]{56,128}/PKG_MIRROR_HASH := skip/g' "$f"
           fi
         done
-        echo "=== Hash check bypassed for all GitHub packages ==="
+        echo "=== Hash check bypassed for all GitHub/git packages ==="
         echo "Modified files:"
         grep -l 'PKG_HASH := skip' package feeds --include=Makefile -r 2>/dev/null | wc -l
 
         # Step 4: 修复 lucihttp CMake 版本兼容性
         # CMake 4.x 移除了对 cmake_minimum_required < 3.5 的兼容
-        # lucihttp 的 CMakeLists.txt 使用了旧版本号
-        LUCIHTTP_CMAKE=$(find feeds -path '*/lucihttp/CMakeLists.txt' 2>/dev/null | head -1)
-        if [ -n "$LUCIHTTP_CMAKE" ]; then
-          sed -i -E 's/cmake_minimum_required\(VERSION [0-9]+\.[0-9]+/cmake_minimum_required(VERSION 3.5/' "$LUCIHTTP_CMAKE"
-          echo "=== lucihttp CMakeLists.txt patched ==="
-          grep cmake_minimum_required "$LUCIHTTP_CMAKE"
+        # lucihttp 源码包里的 CMakeLists.txt 使用了 VERSION 2.6
+        # 正确做法：在 feeds 包的 patches/ 目录注入 patch，
+        # OpenWrt 构建系统会在解压源码后自动 quilt apply
+        LUCIHTTP_PKG=$(find feeds -type d -name 'lucihttp' 2>/dev/null | head -1)
+        if [ -n "$LUCIHTTP_PKG" ]; then
+          mkdir -p "$LUCIHTTP_PKG/patches"
+          cat > "$LUCIHTTP_PKG/patches/001-cmake-compat.patch" << 'PATCH_EOF'
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -1,4 +1,4 @@
+-cmake_minimum_required(VERSION 2.6)
++cmake_minimum_required(VERSION 3.10)
+ 
+ PROJECT(liblucihttp C)
+ 
+PATCH_EOF
+          echo "=== lucihttp cmake compat patch injected ==="
+          ls "$LUCIHTTP_PKG/patches/"
         else
-          echo "WARNING: lucihttp CMakeLists.txt not found in feeds"
+          echo "WARNING: lucihttp package dir not found in feeds"
         fi
-
-        # Step 5: 修复其他包的 CMake 版本兼容性（通用处理）
-        find feeds package -name CMakeLists.txt 2>/dev/null | while read f; do
-          if grep -qE 'cmake_minimum_required\(VERSION [12]\.' "$f"; then
-            sed -i -E 's/cmake_minimum_required\(VERSION [0-9]+\.[0-9]+/cmake_minimum_required(VERSION 3.5/' "$f"
-          fi
-        done
         echo "=== CMake compatibility patched ==="
 
     - name: Force Single Device Build
