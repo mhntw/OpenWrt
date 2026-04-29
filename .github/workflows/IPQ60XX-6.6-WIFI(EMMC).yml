@@ -188,6 +188,20 @@ jobs:
         fi
         echo "=== CMake compatibility patched ==="
 
+        # Step5: 修复 rpcd-mod-luci CMake 版本兼容性
+        # CMake 3.31.6 移除了对 cmake_minimum_required < 3.5 的兼容
+        # rpcd-mod-luci 的 CMakeLists.txt 使用了旧版本语法
+        RPC_MOD_LUCI_PKG=$(find feeds -type d -name 'rpcd-mod-luci' 2>/dev/null | head -1)
+        if [ -n "$RPC_MOD_LUCI_PKG" ]; then
+          mkdir -p "$RPC_MOD_LUCI_PKG/patches"
+          printf '%s' "LS0tIGEvQ01ha2VMaXN0cy50eHQKKysrIGIvQ01ha2VMaXN0cy50eHQKQEAgLTEsNCArMSw0IEBACi1jbWFrZV9taW5pbXVtX3JlcXVpcmVkKFZFUlNJT04gMi42KQorY21ha2VfbWluaW11bV9yZXF1aXJlZChWRVJTSU9OIDMuMTApCgogUFJPSkVDVChycGNkLW1vZC1sdWNpIEMpCg==" | base64 -d > "$RPC_MOD_LUCI_PKG/patches/001-cmake-compat.patch"
+          echo "=== rpcd-mod-luci cmake compat patch injected ==="
+          ls "$RPC_MOD_LUCI_PKG/patches/"
+        else
+          echo "WARNING: rpcd-mod-luci package dir not found in feeds"
+        fi
+        echo "=== All CMake compatibility fixes applied ==="
+
     - name: Force Single Device Build
       run: |
         cd $OPENWRT_PATH
