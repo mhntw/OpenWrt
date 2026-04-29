@@ -177,16 +177,7 @@ jobs:
         LUCIHTTP_PKG=$(find feeds -type d -name 'lucihttp' 2>/dev/null | head -1)
         if [ -n "$LUCIHTTP_PKG" ]; then
           mkdir -p "$LUCIHTTP_PKG/patches"
-          cat > "$LUCIHTTP_PKG/patches/001-cmake-compat.patch" << 'PATCH_EOF'
---- a/CMakeLists.txt
-+++ b/CMakeLists.txt
-@@ -1,4 +1,4 @@
--cmake_minimum_required(VERSION 2.6)
-+cmake_minimum_required(VERSION 3.10)
- 
- PROJECT(liblucihttp C)
- 
-PATCH_EOF
+          printf '%s' "LS0tIGEvQ01ha2VMaXN0cy50eHQKKysrIGIvQ01ha2VMaXN0cy50eHQKQEAgLTEsNCArMSw0IEBACi1jbWFrZV9taW5pbXVtX3JlcXVpcmVkKFZFUlNJT04gMi42KQorY21ha2VfbWluaW11bV9yZXF1aXJlZChWRVJTSU9OIDMuMTApCgogUFJPSkVDVChsaWJsdWNpaHR0cCBDKQo=" | base64 -d > "$LUCIHTTP_PKG/patches/001-cmake-compat.patch"
           echo "=== lucihttp cmake compat patch injected ==="
           ls "$LUCIHTTP_PKG/patches/"
         else
