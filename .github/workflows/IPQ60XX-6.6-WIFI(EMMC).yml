@@ -251,15 +251,15 @@ jobs:
           # VERSION:=$(if $(PKG_VERSION),...,$(PKG_SRC_VERSION))
           # 当 PKG_VERSION 未定义时使用 PKG_SRC_VERSION (格式 git-YY.JJJ-SSSSS-HASH)
           # APK 不允许版本号有两个连字符，需要处理
-          grep -n 'VERSION:=' \"$LUCI_MK\" | head -5
+          grep -n 'VERSION:=' "$LUCI_MK" | head -5
           
           # 方案: 让 VERSION 在使用 PKG_SRC_VERSION 时去掉 git- 前缀
           # 原版: VERSION:=$(if $(PKG_VERSION),...,$(PKG_SRC_VERSION))
           # 改为: VERSION:=$(if $(PKG_VERSION),...,$(patsubst git-%,%,$(PKG_SRC_VERSION)))
           # 这样 git-25.294.31582-8ceae5a 变成 25.294.31582-8ceae5a (只有一个连字符)
-          sed -i 's/\$(PKG_SRC_VERSION)/\$(patsubst git-%,%,$(PKG_SRC_VERSION))/g' \"$LUCI_MK\"
+          perl -pi -e 's/\$\(PKG_SRC_VERSION\)/\$(patsubst git-%,%,\$(PKG_SRC_VERSION))/g' "$LUCI_MK"
           echo "=== After patch ==="
-          grep 'VERSION:=' \"$LUCI_MK\" | head -3
+          grep 'VERSION:=' "$LUCI_MK" | head -3
         fi
         
         echo "=== APK version fix applied ==="
