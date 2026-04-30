@@ -211,59 +211,37 @@ jobs:
           exit 1
         fi
 
-    - name: Fix All CMake Version Compatibility
+    - name: Fix APK Package Version Format
       run: |
-        # 在 make download 之后、make compile 之前
-        # 修复 cmake_minimum_required 问题：
-        # 1) dl/ 中的 tarball（解压后到 build_dir）
-        # 2) feeds/ 目录中直接复制的源码（如 rpcd-mod-luci）
-        # 规则：把任何 < 3.5 或 > 3.10 的版本都改成 3.10（匹配当前 CMake 版本）
+        # apk 包格式只允许版本号中有一个连字符分隔 version-release
+        # LuCI 生成的版本号 git-25.294.31582-8ceae5a 有两个连字符，导致 apk mkpkg 报错:
+        # "ERROR: info field 'version' has invalid value: package version is invalid"
+        # 修复方法：把 feeds/luci/modules/luci-base/Makefile 中的 PKG_VERSION/PKG_RELEASE
+        # 改为只用单一连字符分隔
         cd $OPENWRT_PATH
-        echo "=== Patching CMakeLists.txt in feeds directory ==="
-        # 先处理 feeds 目录中直接复制的源码
-        find feeds -name CMakeLists.txt -size +0 2>/dev/null | while read cm; do
-          if grep -q 'cmake_minimum_required' "$cm" 2>/dev/null; then
-            oldline=$(grep 'cmake_minimum_required' "$cm" 2>/dev/null | head -1)
-            # perl: 匹配 VERSION X.Y，若 X<3 或 (X==3 且 Y<5) 或 X>3 或 (X==3 且 Y>10) 则改成 3.10
-            perl -pi -e 's/cmake_minimum_required\(VERSION\s+([0-9]+)\.([0-9]+)\)/my($m,$n)=($1,$2); ($m<3||($m==3&&$n<5)||$m>3||($m==3&&$n>10))?"cmake_minimum_required(VERSION 3.10)":$&/e' "$cm"
-            newline=$(grep 'cmake_minimum_required' "$cm" 2>/dev/null | head -1)
-            if [ "$oldline" != "$newline" ]; then
-              echo "Patched feeds: $cm: $oldline -> $newline"
-            fi
-          fi
-        done
-        echo "=== Patching CMakeLists.txt in downloaded tarballs ==="
-        # 再处理 dl/ 目录中的 tarball
-        find dl -name '*.tar.xz' -o -name '*.tar.zst' 2>/dev/null | while read tarball; do
-          tmpdir=$(mktemp -d)
-          tar xf "$tarball" -C "$tmpdir" 2>/dev/null || { rm -rf "$tmpdir"; continue; }
-          srcdir=$(find "$tmpdir" -mindepth 1 -maxdepth 1 -type d | head -1)
-          if [ -n "$srcdir" ]; then
-            found=0
-            for cm in $(find "$srcdir" -name CMakeLists.txt 2>/dev/null); do
-              if grep -q 'cmake_minimum_required' "$cm" 2>/dev/null; then
-                oldline=$(grep 'cmake_minimum_required' "$cm" 2>/dev/null | head -1)
-                perl -pi -e 's/cmake_minimum_required\(VERSION\s+([0-9]+)\.([0-9]+)\)/my($m,$n)=($1,$2); ($m<3||($m==3&&$n<5)||$m>3||($m==3&&$n>10))?"cmake_minimum_required(VERSION 3.10)":$&/e' "$cm"
-                newline=$(grep 'cmake_minimum_required' "$cm" 2>/dev/null | head -1)
-                if [ "$oldline" != "$newline" ]; then
-                  echo "Patched tarball: $tarball ($(basename "$srcdir")): $oldline -> $newline"
-                  found=1
-                fi
-              fi
-            done
-            if [ "$found" = "1" ]; then
-              rm -f "$tarball"
-              # 根据原格式重新打包
-              case "$tarball" in
-                *.tar.zst) tar cf - -C "$(dirname "$srcdir")" "$(basename "$srcdir")" | zstd -19 -o "$tarball.tmp" ;;
-                *.tar.xz)  tar cf - -C "$(dirname "$srcdir")" "$(basename "$srcdir")" | xz -6e > "$tarball.tmp" ;;
-              esac
-              mv "$tarball.tmp" "$tarball"
-            fi
-          fi
-          rm -rf "$tmpdir"
-        done
-        echo "=== CMake compatibility patches applied ==="
+        
+        # 找 luci-base Makefile
+        LUCI_BASE=$(find feeds -path '*/luci-base/Makefile' 2>/dev/null | head -1)
+        if [ -n "$LUCI_BASE" ]; then
+          echo "==> Patching $LUCI_BASE"
+          
+          # 查看当前版本定义（保留备份）
+          grep -E 'PKG_VERSION|PKG_RELEASE|PKG_GITBRANCH|LUCI_VERSION' "$LUCI_BASE" | head -10
+          
+          # 修复方法：设置 PKG_VERSION 为纯数字（如 25.294.31582），PKG_RELEASE 为 1
+          # 这样生成的版本号是 25.294.31582-1，apk 可以正常解析
+          sed -i '/PKG_VERSION/d' "$LUCI_BASE"
+          echo "PKG_VERSION:=25.294.31582" >> "$LUCI_BASE"
+          sed -i '/PKG_RELEASE/d' "$LUCI_BASE"
+          echo "PKG_RELEASE:=1" >> "$LUCI_BASE"
+          
+          echo "=== Patched luci-base version ==="
+          grep -E 'PKG_VERSION|PKG_RELEASE' "$LUCI_BASE"
+        else
+          echo "WARNING: luci-base Makefile not found"
+        fi
+        
+        echo "=== APK version fix applied ==="
 
     - name: Compile Firmware
       id: compile
