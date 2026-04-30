@@ -258,6 +258,8 @@ jobs:
           # 改为: VERSION:=$(if $(PKG_VERSION),...,$(patsubst git-%,%,$(PKG_SRC_VERSION)))
           # 这样 git-25.294.31582-8ceae5a 变成 25.294.31582-8ceae5a (只有一个连字符)
           perl -pi -e 's/\$\(PKG_SRC_VERSION\)/\$(patsubst git-%,%,\$(PKG_SRC_VERSION))/g' "$LUCI_MK"
+          # Also fix PKG_PO_VERSION used by translation packages (luci-i18n-*)
+          perl -pi -e 's/\$\(PKG_PO_VERSION\)/\$(patsubst git-%,%,\$(PKG_PO_VERSION))/g' "$LUCI_MK"
           echo "=== After patch ==="
           grep 'VERSION:=' "$LUCI_MK" | head -3
         fi
