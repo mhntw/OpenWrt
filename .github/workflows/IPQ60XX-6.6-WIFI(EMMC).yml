@@ -175,10 +175,11 @@ jobs:
         cd $OPENWRT_PATH
         FIXED=0
         for cm in $(find feeds -name CMakeLists.txt 2>/dev/null); do
-          if grep -qP 'cmake_minimum_required\(VERSION\s+[0-2]\.' "$cm" 2>/dev/null; then
+          # Match any cmake_minimum_required(VERSION X.Y) regardless of version
+          if grep -qP 'cmake_minimum_required\(VERSION\s+[0-9.]+\)' "$cm" 2>/dev/null; then
             oldver=$(grep -oP 'cmake_minimum_required\(VERSION\s+\K[0-9.]+' "$cm" | head -1)
             echo "Fixing $cm: cmake $oldver -> 3.10"
-            sed -i 's/cmake_minimum_required(VERSION\s*[0-9.]\+)/cmake_minimum_required(VERSION 3.10)/' "$cm"
+            sed -i 's/cmake_minimum_required(VERSION\s*[0-9.]+)/cmake_minimum_required(VERSION 3.10)/g' "$cm"
             FIXED=$((FIXED+1))
           fi
         done
