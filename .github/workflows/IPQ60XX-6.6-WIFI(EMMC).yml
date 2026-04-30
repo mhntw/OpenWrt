@@ -243,7 +243,7 @@ jobs:
         
         # Step 2: Fix dynamic version in luci.mk line ~389
         # APK mkpkg 动态生成的版本在 luci. mk VERSION 变量中定义，改为纯数字
-        LUCI_MK=$(find feeds -path '*/luci/build/luci. mk' 2>/dev/null | head -1)
+        LUCI_MK=$(find feeds -path '*/luci/build/luci.mk' 2>/dev/null | head -1)
         if [ -n "$LUCI_MK" ]; then
           echo "==> Patching $LUCI_MK"
           # VERSION:=$(pkgver) 这种形式，改为硬编码版本
