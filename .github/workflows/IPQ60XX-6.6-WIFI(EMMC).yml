@@ -108,6 +108,8 @@ jobs:
         cd $OPENWRT_PATH
         ./scripts/feeds update -a
         ./scripts/feeds install -a
+        # 删除冲突的 lucihttp cmake compat patch（tarball patch 已处理，无需重复）
+        rm -f feeds/luci/contrib/package/lucihttp/patches/001-cmake-compat.patch
 
     - name: Fix Kconfig Circular Dependency
       run: |
