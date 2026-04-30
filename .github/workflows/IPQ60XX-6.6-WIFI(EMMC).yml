@@ -242,17 +242,24 @@ jobs:
           echo "WARNING: luci-base Makefile not found"
         fi
         
-        # Step 2: Fix dynamic version in luci.mk line ~389
-        # APK mkpkg 动态生成的版本在 luci. mk VERSION 变量中定义，改为纯数字
-        LUCI_MK=$(find feeds -path '*/luci/build/luci.mk' 2>/dev/null | head -1)
+        # Step 2: Fix dynamic version in luci.mk
+        # APK mkpkg 动态生成的版本在 luci.mk VERSION 变量中定义，改为纯数字
+        LUCI_MK=$(find feeds -path '*/luci/luci.mk' 2>/dev/null | head -1)
         if [ -n "$LUCI_MK" ]; then
           echo "==> Patching $LUCI_MK"
-          # VERSION:=$(pkgver) 这种形式，改为硬编码版本
-          # 先备份原内容
-          grep -n 'VERSION:=\|pkgver' "$LUCI_MK" | head -5
-          # 直接替换为硬编码
-          sed -i 's/^VERSION:=\$(pkgver)/VERSION:=25.294.31582/' "$LUCI_MK"
-          grep 'VERSION:=' "$LUCI_MK"
+          # luci.mk 第156行 VERSION 定义:
+          # VERSION:=$(if $(PKG_VERSION),...,$(PKG_SRC_VERSION))
+          # 当 PKG_VERSION 未定义时使用 PKG_SRC_VERSION (格式 git-YY.JJJ-SSSSS-HASH)
+          # APK 不允许版本号有两个连字符，需要处理
+          grep -n 'VERSION:=' \"$LUCI_MK\" | head -5
+          
+          # 方案: 让 VERSION 在使用 PKG_SRC_VERSION 时去掉 git- 前缀
+          # 原版: VERSION:=$(if $(PKG_VERSION),...,$(PKG_SRC_VERSION))
+          # 改为: VERSION:=$(if $(PKG_VERSION),...,$(patsubst git-%,%,$(PKG_SRC_VERSION)))
+          # 这样 git-25.294.31582-8ceae5a 变成 25.294.31582-8ceae5a (只有一个连字符)
+          sed -i 's/\$(PKG_SRC_VERSION)/\$(patsubst git-%,%,$(PKG_SRC_VERSION))/g' \"$LUCI_MK\"
+          echo "=== After patch ==="
+          grep 'VERSION:=' \"$LUCI_MK\" | head -3
         fi
         
         echo "=== APK version fix applied ==="
