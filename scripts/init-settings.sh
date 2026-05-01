@@ -1,21 +1,13 @@
 #!/bin/sh
+# OpenWrt 默认配置 - 首次启动自动应用
+# LAN IP: 192.168.1.1 / 主机名: OpenWrt / WiFi: 默认
 
-# ============================================
-# JDCloud AX1800 Pro 固化配置
-# LAN IP: 192.168.2.1
-# WiFi: Huawei5G / abc123abc
-# ============================================
-
-# 设置 LAN IP
-uci set network.lan.ipaddr='192.168.2.1'
+# 重置 LAN IP 为默认
+uci set network.lan.ipaddr='192.168.1.1'
 uci commit network
 
-# 设置 WiFi
-uci set wireless.@wifi-iface[0].ssid='Huawei5G'
-uci set wireless.@wifi-iface[0].key='abc123abc'
-uci set wireless.@wifi-iface[0].encryption='psk2'
-uci set wireless.@wifi-iface[0].disabled='0'
-uci set wireless.radio0.disabled='0'
-uci commit wireless
+# 重置主机名为默认 OpenWrt
+uci set system.@system[0].hostname='OpenWrt'
+uci commit system
 
 exit 0
