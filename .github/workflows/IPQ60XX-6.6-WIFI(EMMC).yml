@@ -303,8 +303,13 @@ jobs:
         cat sha256sums
         cp $OPENWRT_PATH/.config build.config
         mkdir -p packages
-        mv -f $OPENWRT_PATH/bin/packages/*/*/*.ipk packages/
-        tar -zcf Packages.tar.gz packages
+        # OpenWrt 23.05+ uses .apk format, older uses .ipk
+        mv -f $OPENWRT_PATH/bin/packages/*/*/*.apk packages/ 2>/dev/null || true
+        mv -f $OPENWRT_PATH/bin/packages/*/*/*.ipk packages/ 2>/dev/null || true
+        # Only create tar if packages exist
+        if [ "$(ls -A packages 2>/dev/null)" ]; then
+          tar -zcf Packages.tar.gz packages
+        fi
         rm -rf packages feeds.buildinfo version.buildinfo
         echo "FIRMWARE_PATH=$PWD" >> $GITHUB_ENV
 
