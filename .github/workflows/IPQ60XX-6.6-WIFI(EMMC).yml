@@ -20,9 +20,6 @@ env:
   # 设置此变量让 CMake 自动将旧版声明视为 3.5
   CMAKE_POLICY_VERSION_MINIMUM: "3.5"
 
-permissions:
-  contents: write
-
 jobs:
   Build:
     runs-on: ubuntu-22.04
@@ -217,38 +214,54 @@ jobs:
 
     - name: Fix APK Package Version Format
       run: |
-        # APK version format requires exactly one hyphen as VERSION-rRELEASE separator
-        # RELEASE must start with 'r' followed by digits (e.g. r1, r5)
-        # LuCI generates: git-25.294.31582-8ceae5a (two hyphens, no r-prefix = invalid)
-        # Fix: convert to 25.294.31582~8ceae5a-r1 (~ for commit hash, -r1 for release)
+        # apk 包格式只允许版本号中有一个连字符分隔 version-release
+        # LuCI 生成的版本号 git-25.294.31582-8ceae5a 有两个连字符，导致 apk mkpkg 报错:
+        # "ERROR: info field 'version' has invalid value: package version is invalid"
+        # 修复方法：把 feeds/luci/modules/luci-base/Makefile 中的 PKG_VERSION/PKG_RELEASE
+        # 改为只用单一连字符分隔
         cd $OPENWRT_PATH
-
+        
+        # 找 luci-base Makefile
+        LUCI_BASE=$(find feeds -path '*/luci-base/Makefile' 2>/dev/null | head -1)
+        if [ -n "$LUCI_BASE" ]; then
+          echo "==> Patching $LUCI_BASE"
+          
+          # 查看当前版本定义（保留备份）
+          grep -E 'PKG_VERSION|PKG_RELEASE|PKG_GITBRANCH|LUCI_VERSION' "$LUCI_BASE" | head -10
+          
+          # 修复方法：设置 PKG_VERSION 为纯数字（如 25.294.31582），PKG_RELEASE 为 1
+          # 这样生成的版本号是 25.294.31582-1，apk 可以正常解析
+          sed -i '/PKG_VERSION/d' "$LUCI_BASE"
+          echo "PKG_VERSION:=25.294.31582" >> "$LUCI_BASE"
+          sed -i '/PKG_RELEASE/d' "$LUCI_BASE"
+          echo "PKG_RELEASE:=1" >> "$LUCI_BASE"
+          
+          echo "=== Patched luci-base version ==="
+          grep -E 'PKG_VERSION|PKG_RELEASE' "$LUCI_BASE"
+        else
+          echo "WARNING: luci-base Makefile not found"
+        fi
+        
+        # Step 2: Fix dynamic version in luci.mk
+        # APK mkpkg 动态生成的版本在 luci.mk VERSION 变量中定义，改为纯数字
         LUCI_MK=$(find feeds -path '*/luci/luci.mk' 2>/dev/null | head -1)
         if [ -n "$LUCI_MK" ]; then
           echo "==> Patching $LUCI_MK"
+          # luci.mk 第156行 VERSION 定义:
+          # VERSION:=$(if $(PKG_VERSION),...,$(PKG_SRC_VERSION))
+          # 当 PKG_VERSION 未定义时使用 PKG_SRC_VERSION (格式 git-YY.JJJ-SSSSS-HASH)
+          # APK 不允许版本号有两个连字符，需要处理
           grep -n 'VERSION:=' "$LUCI_MK" | head -5
-
-          # Fix main VERSION definition (contains PKG_VERSION conditional)
-          # Original: VERSION:=$(if $(PKG_VERSION),$(if $(PKG_RELEASE),$(PKG_VERSION)-$(PKG_RELEASE),$(PKG_VERSION)),$(PKG_SRC_VERSION))
-          # After fix:  VERSION:=$(if $(PKG_VERSION),$(if $(PKG_RELEASE),$(PKG_VERSION)-r$(PKG_RELEASE),$(PKG_VERSION)),$(subst -,~,$(patsubst git-%,%,$(PKG_SRC_VERSION)))-r1)
-          # Key changes:
-          #   1. Add 'r' prefix to PKG_RELEASE: $(PKG_RELEASE) -> r$(PKG_RELEASE)
-          #   2. Use $(subst -,~, ...) to convert middle hyphen to tilde
-          #   3. Use $(patsubst git-%,%, ...) to strip git- prefix
-          #   4. Append -r1 as release when using PKG_SRC_VERSION
-          sed -i '/VERSION:=\$(if \$(PKG_VERSION)/c\  VERSION:=$(if $(PKG_VERSION),$(if $(PKG_RELEASE),$(PKG_VERSION)-r$(PKG_RELEASE),$(PKG_VERSION)),$(subst -,~,$(patsubst git-%,%,$(PKG_SRC_VERSION)))-r1)' "$LUCI_MK"
-
-          # Fix PKG_PO_VERSION line (used by luci-i18n-* translation packages)
-          # Original: VERSION:=$(PKG_PO_VERSION)
-          # After fix: VERSION:=$(subst -,~,$(patsubst git-%,%,$(PKG_PO_VERSION)))-r1
-          sed -i '/VERSION:=\$(PKG_PO_VERSION)/c\    VERSION:=$(subst -,~,$(patsubst git-%,%,$(PKG_PO_VERSION)))-r1' "$LUCI_MK"
-
+          
+          # 方案: 让 VERSION 在使用 PKG_SRC_VERSION 时去掉 git- 前缀
+          # 原版: VERSION:=$(if $(PKG_VERSION),...,$(PKG_SRC_VERSION))
+          # 改为: VERSION:=$(if $(PKG_VERSION),...,$(patsubst git-%,%,$(PKG_SRC_VERSION)))
+          # 这样 git-25.294.31582-8ceae5a 变成 25.294.31582-8ceae5a (只有一个连字符)
+          perl -pi -e 's/\$\(PKG_SRC_VERSION\)/\$(patsubst git-%,%,\$(PKG_SRC_VERSION))/g' "$LUCI_MK"
           echo "=== After patch ==="
-          grep 'VERSION:=' "$LUCI_MK" | head -5
-        else
-          echo "WARNING: luci.mk not found"
+          grep 'VERSION:=' "$LUCI_MK" | head -3
         fi
-
+        
         echo "=== APK version fix applied ==="
 
     - name: Compile Firmware
@@ -262,8 +275,11 @@ jobs:
         chmod +x files/etc/uci-defaults/99-init-settings
         # 用 python3 脚本直接替换密码哈希
         python3 - << 'PYEOF'
-        import crypt, sys
-        hash_val = crypt.crypt('passwordTsmjg', crypt.mksalt(crypt.METHOD_SHA512))
+        import subprocess, sys
+        hash_val = subprocess.check_output([
+            'python3', '-c',
+            'from passlib.hash import sha512_crypt; print(sha512_crypt.hash(\'password\', salt=\'OpenWrtsalt\', rounds=656000))'
+        ]).decode().strip()
         with open('files/etc/uci-defaults/99-init-settings', 'r') as f:
             content = f.read()
         with open('files/etc/uci-defaults/99-init-settings', 'w') as f:
@@ -305,14 +321,8 @@ jobs:
         cd $OPENWRT_PATH/bin/targets/*/*
         cat sha256sums
         cp $OPENWRT_PATH/.config build.config
-        mkdir -p packages
-        # OpenWrt 23.05+ uses .apk format, older uses .ipk
-        mv -f $OPENWRT_PATH/bin/packages/*/*/*.apk packages/ 2>/dev/null || true
-        mv -f $OPENWRT_PATH/bin/packages/*/*/*.ipk packages/ 2>/dev/null || true
-        # Only create tar if packages exist
-        if [ "$(ls -A packages 2>/dev/null)" ]; then
-          tar -zcf Packages.tar.gz packages
-        fi
+        mv -f $OPENWRT_PATH/bin/packages/*/*/*.ipk packages
+        tar -zcf Packages.tar.gz packages
         rm -rf packages feeds.buildinfo version.buildinfo
         echo "FIRMWARE_PATH=$PWD" >> $GITHUB_ENV
 
@@ -340,7 +350,7 @@ jobs:
           - ⚽ 固件源码: ${{ env.REPO_URL }}
           - 💝 源码分支: ${{ env.REPO_BRANCH }}
           - 🌐 默认地址: 192.168.2.1
-          - 🔑 默认密码: passwordTsmjg
+          - 🔑 默认密码: password
           - 📶 WiFi 2.4G: huawei / WiFi 5G: Huawei5G
           - 🔑 WiFi密码: abc123abc
           ### 🧊 固件版本
