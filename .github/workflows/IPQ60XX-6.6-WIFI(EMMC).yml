@@ -20,6 +20,9 @@ env:
   # 设置此变量让 CMake 自动将旧版声明视为 3.5
   CMAKE_POLICY_VERSION_MINIMUM: "3.5"
 
+permissions:
+  contents: write
+
 jobs:
   Build:
     runs-on: ubuntu-22.04
