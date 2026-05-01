@@ -203,6 +203,24 @@ jobs:
           exit 1
         fi
 
+    - name: Embed Init Settings
+      run: |
+        # 将 init-settings.sh 嵌入固件，首次启动时自动执行
+        cd $OPENWRT_PATH
+        
+        # 创建 files 目录结构
+        mkdir -p files/etc/uci-defaults
+        
+        # 复制 init-settings.sh
+        if [ -f "$GITHUB_WORKSPACE/scripts/init-settings.sh" ]; then
+          cp "$GITHUB_WORKSPACE/scripts/init-settings.sh" files/etc/uci-defaults/99-init-settings
+          chmod +x files/etc/uci-defaults/99-init-settings
+          echo "=== Init settings embedded ==="
+          cat files/etc/uci-defaults/99-init-settings
+        else
+          echo "⚠️ scripts/init-settings.sh not found, skipping"
+        fi
+
     - name: Fix APK Package Version Format
       run: |
         # apk 包格式只允许版本号中有一个连字符分隔 version-release
@@ -272,7 +290,6 @@ jobs:
         cd $OPENWRT_PATH
         echo "=== Final device config ==="
         grep -E 'DEVICE_jdcloud_re-ss-01|MULTI_PROFILE|PARTSIZE|TARGET_ROOTFS_PARTSIZE' .config || true
-        # init-settings.sh 已清空，不再嵌入自定义配置
 
         # 多线程编译 + NSS 模块 OOM 保护
         CPU_CORES=$(nproc)
