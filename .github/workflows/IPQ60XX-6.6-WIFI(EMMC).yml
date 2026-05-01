@@ -20,6 +20,9 @@ env:
   # 设置此变量让 CMake 自动将旧版声明视为 3.5
   CMAKE_POLICY_VERSION_MINIMUM: "3.5"
 
+permissions:
+  contents: write
+
 jobs:
   Build:
     runs-on: ubuntu-22.04
@@ -253,11 +256,22 @@ jobs:
           # APK 不允许版本号有两个连字符，需要处理
           grep -n 'VERSION:=' "$LUCI_MK" | head -5
           
-          # 方案: 让 VERSION 在使用 PKG_SRC_VERSION 时去掉 git- 前缀
+          # 方案: 去掉 git- 前缀 + 把剩余连字符替换为 ~ (APK 只允许一个连字符)
           # 原版: VERSION:=$(if $(PKG_VERSION),...,$(PKG_SRC_VERSION))
-          # 改为: VERSION:=$(if $(PKG_VERSION),...,$(patsubst git-%,%,$(PKG_SRC_VERSION)))
-          # 这样 git-25.294.31582-8ceae5a 变成 25.294.31582-8ceae5a (只有一个连字符)
-          perl -pi -e 's/\$\(PKG_SRC_VERSION\)/\$(patsubst git-%,%,\$(PKG_SRC_VERSION))/g' "$LUCI_MK"
+          # git-25.294.31582-8ceae5a 有两个连字符
+          # patsubst git-%,% → 25.294.31582-8ceae5a (仍两个连字符，无效)
+          # subst -,~ 后 → 25.294.31582~8ceae5a (一个连字符，有效)
+          #
+          # 修复主 VERSION 行（含 PKG_VERSION 条件判断）
+          # 原: VERSION:=$(if $(PKG_VERSION),$(if $(PKG_RELEASE),$(PKG_VERSION)-$(PKG_RELEASE),$(PKG_VERSION)),$(PKG_SRC_VERSION))
+          # 改: VERSION:=$(if $(PKG_VERSION),$(if $(PKG_RELEASE),$(PKG_VERSION)-r$(PKG_RELEASE),$(PKG_VERSION)),$(subst -,~,$(patsubst git-%,%,$(PKG_SRC_VERSION))))
+          sed -i '/VERSION:=\$(if \$(PKG_VERSION)/c\  VERSION:=$(if $(PKG_VERSION),$(if $(PKG_RELEASE),$(PKG_VERSION)-r$(PKG_RELEASE),$(PKG_VERSION)),$(subst -,~,$(patsubst git-%,%,$(PKG_SRC_VERSION))))' "$LUCI_MK"
+
+          # 修复 PKG_PO_VERSION 行（luci-i18n-* 翻译包使用）
+          # 原: VERSION:=$(PKG_PO_VERSION)
+          # 改: VERSION:=$(subst -,~,$(patsubst git-%,%,$(PKG_PO_VERSION)))
+          sed -i '/VERSION:=\$(PKG_PO_VERSION)/c\    VERSION:=$(subst -,~,$(patsubst git-%,%,$(PKG_PO_VERSION)))' "$LUCI_MK"
+
           echo "=== After patch ==="
           grep 'VERSION:=' "$LUCI_MK" | head -3
         fi
@@ -310,7 +324,7 @@ jobs:
         cd $OPENWRT_PATH/bin/targets/*/*
         cat sha256sums
         cp $OPENWRT_PATH/.config build.config
-        mv -f $OPENWRT_PATH/bin/packages/*/*/*.ipk packages
+        mv -f $OPENWRT_PATH/bin/packages/*/*/*.apk $OPENWRT_PATH/bin/packages/*/*/*.ipk packages 2>/dev/null || true
         tar -zcf Packages.tar.gz packages
         rm -rf packages feeds.buildinfo version.buildinfo
         echo "FIRMWARE_PATH=$PWD" >> $GITHUB_ENV
@@ -344,3 +358,4 @@ jobs:
           ### 🧊 固件版本
           - 固件编译前最后一次➦[主源码](${{ env.REPO_URL }})更新记录
           - ${{ env.VERSION_INFO }}
+
