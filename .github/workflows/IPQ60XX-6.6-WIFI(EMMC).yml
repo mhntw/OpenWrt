@@ -273,18 +273,7 @@ jobs:
         mkdir -p files/etc/uci-defaults
         cp $GITHUB_WORKSPACE/scripts/init-settings.sh files/etc/uci-defaults/99-init-settings
         chmod +x files/etc/uci-defaults/99-init-settings
-        # 用 python3 脚本直接替换密码哈希
-        python3 - << 'PYEOF'
-        import subprocess, sys
-        hash_val = subprocess.check_output([
-            'python3', '-c',
-            'from passlib.hash import sha512_crypt; print(sha512_crypt.hash(\'password\', salt=\'OpenWrtsalt\', rounds=656000))'
-        ]).decode().strip()
-        with open('files/etc/uci-defaults/99-init-settings', 'r') as f:
-            content = f.read()
-        with open('files/etc/uci-defaults/99-init-settings', 'w') as f:
-            f.write(content.replace('PLACEHOLDER_PASSWORD_HASH', hash_val))
-        PYEOF
+        # 密码哈希已预计算硬编码在 init-settings.sh 中，无需运行时替换
 
         # 多线程编译 + NSS 模块 OOM 保护
         CPU_CORES=$(nproc)
@@ -351,8 +340,7 @@ jobs:
           - 💝 源码分支: ${{ env.REPO_BRANCH }}
           - 🌐 默认地址: 192.168.2.1
           - 🔑 默认密码: password
-          - 📶 WiFi 2.4G: huawei / WiFi 5G: Huawei5G
-          - 🔑 WiFi密码: abc123abc
+          - 📶 WiFi: 首次登录后在 LuCI 中自行配置
           ### 🧊 固件版本
           - 固件编译前最后一次➦[主源码](${{ env.REPO_URL }})更新记录
           - ${{ env.VERSION_INFO }}
