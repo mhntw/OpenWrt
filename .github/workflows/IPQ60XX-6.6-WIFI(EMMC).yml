@@ -284,10 +284,7 @@ jobs:
         cd $OPENWRT_PATH
         echo "=== Final device config ==="
         grep -E 'DEVICE_jdcloud_re-ss-01|MULTI_PROFILE|PARTSIZE|TARGET_ROOTFS_PARTSIZE' .config || true
-        mkdir -p files/etc/uci-defaults
-        cp $GITHUB_WORKSPACE/scripts/init-settings.sh files/etc/uci-defaults/99-init-settings
-        chmod +x files/etc/uci-defaults/99-init-settings
-        # 密码哈希已预计算硬编码在 init-settings.sh 中，无需运行时替换
+        # init-settings.sh 已清空，不再嵌入自定义配置
 
         # 多线程编译 + NSS 模块 OOM 保护
         CPU_CORES=$(nproc)
@@ -352,8 +349,8 @@ jobs:
           - 💻 这是 ${{ env.FIRMWARE_TAG }} 平台使用的 OpenWrt 固件
           - ⚽ 固件源码: ${{ env.REPO_URL }}
           - 💝 源码分支: ${{ env.REPO_BRANCH }}
-          - 🌐 默认地址: 192.168.2.1
-          - 🔑 默认密码: password
+          - 🌐 默认地址: 192.168.1.1
+          - 🔑 默认密码: 无（首次登录请设置 root 密码）
           - 📶 WiFi: 首次登录后在 LuCI 中自行配置
           ### 🧊 固件版本
           - 固件编译前最后一次➦[主源码](${{ env.REPO_URL }})更新记录
