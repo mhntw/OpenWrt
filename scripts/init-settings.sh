@@ -2,38 +2,15 @@
 
 # ============================================
 # JDCloud AX1800 Pro 固化配置
-# 密码哈希由 GitHub Actions 编译时动态生成
+# root 密码: password
 # ============================================
 
-# 设置 ROOT 密码 (sha512crypt，哈希由编译时生成替换)
-# PLACEHOLDER_PASSWORD_HASH 会被 workflow 替换为实际哈希
-sed -i "s#^root:.*#root:PLACEHOLDER_PASSWORD_HASH:19500:0:99999:7:::#" /etc/shadow
+# 设置 ROOT 密码 (sha512crypt, 预计算hash)
+sed -i 's#^root:.*#root:$6$rounds=656000$OpenWrtsalt$Uq3Rp/GuH/a61IhPMAMmnUk2wGtQ8DswT6fN6J.nXkCjbfAqbyhWO4IeRN/etQXL4.8bdbWPedfGdtp0d.MlI.:19500:0:99999:7:::#' /etc/shadow
 
 # 设置 LAN IP
 uci set network.lan.ipaddr='192.168.2.1'
 uci commit network
-
-# 设置 PPPoE (账号密码已 Base64 混淆，防明文泄露)
-ENCODED_USER="dDUzMjA0OTg0MjA3MQ=="
-ENCODED_PASS="MTIzMTIz"
-uci set network.wan.proto='pppoe'
-uci set network.wan.username="$(echo $ENCODED_USER | base64 -d)"
-uci set network.wan.password="$(echo $ENCODED_PASS | base64 -d)"
-uci set network.wan.ipv6='1'
-uci commit network
-
-# 设置 WiFi 2.4G
-uci set wireless.default_radio0.ssid='huawei'
-uci set wireless.default_radio0.encryption='psk2+ccmp'
-uci set wireless.default_radio0.key='abc123abc'
-uci set wireless.radio0.disabled='0'
-
-# 设置 WiFi 5G
-uci set wireless.default_radio1.ssid='Huawei5G'
-uci set wireless.default_radio1.encryption='psk2+ccmp'
-uci set wireless.default_radio1.key='abc123abc'
-uci set wireless.radio1.disabled='0'
-uci commit wireless
 
 # 设置主机名
 uci set system.@system[0].hostname='JDCloud-AX1800'
