@@ -2,8 +2,9 @@ name: IPQ60XX-6.6-WIFI(EMMC)
 
 on:
   workflow_dispatch:
-  # schedule:
-  #   - cron: 0 19 * * *
+  push:
+    branches:
+      - main
 
 env:
   REPO_URL: https://github.com/breeze303/ipq60xx-6.6.git
@@ -19,6 +20,7 @@ env:
   # OpenWrt 编译自己的 CMake (3.27+)，已移除 cmake_minimum_required < 3.5 兼容
   # 设置此变量让 CMake 自动将旧版声明视为 3.5
   CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+  CMAKE_POLICY_VERSION_MAXIMUM: "3.10"
 
 permissions:
   contents: write
@@ -28,20 +30,6 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
-    - name: Check Server Performance
-      run: |
-        echo "警告⚠"
-        echo "分配的服务器性能有限，若选择的插件过多，务必注意CPU性能！"
-        echo -e "已知CPU型号（降序）：7763，8370C，8272CL，8171M，E5-2673 \n"
-        echo "--------------------------CPU信息--------------------------"
-        echo "CPU物理数量：$(cat /proc/cpuinfo | grep "physical id" | sort | uniq | wc -l)"
-        echo -e "CPU核心信息：$(cat /proc/cpuinfo | grep name | cut -f2 -d: | uniq -c) \n"
-        echo "--------------------------内存信息--------------------------"
-        echo "已安装内存详细信息："
-        echo -e "$(sudo lshw -short -C memory | grep GiB) \n"
-        echo "--------------------------硬盘信息--------------------------"
-        echo "硬盘数量：$(ls /dev/sd* | grep -v [1-9] | wc -l)" && df -hT
-
     - name: Initialization Environment
       env:
         DEBIAN_FRONTEND: noninteractive
@@ -57,14 +45,14 @@ jobs:
         sudo timedatectl set-timezone "$TZ"
 
     - name: Combine Disks
-      uses: easimon/maximize-build-space@master
+      uses: easimon/maximize-build-space@c28619d8999a147d5e09c1199f84ff6af6ad5794
       with:
         swap-size-mb: 1024
         temp-reserve-mb: 100
         root-reserve-mb: 1024
 
     - name: Checkout
-      uses: actions/checkout@main
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
 
     - name: Clone Source Code
       run: |
@@ -100,7 +88,7 @@ jobs:
 
     - name: Cache Toolchain
       if: env.CACHE_TOOLCHAIN == 'true'
-      uses: HiGarfield/cachewrtbuild@main
+      uses: HiGarfield/cachewrtbuild@258c944cc892a032add018ef924830d1643596a6
       with:
         ccache: true
         mixkey: ${{ env.SOURCE_REPO }}-${{ env.REPO_BRANCH }}-${{ env.DEVICE_TARGET }}-${{ env.DEVICE_SUBTARGET }}
@@ -202,7 +190,7 @@ jobs:
     - name: Download DL Package
       run: |
         cd $OPENWRT_PATH
-        make download -j8
+        make download -j$(nproc)
         # 检查是否有下载失败的包（dl 中存在空文件或小于 1KB 的文件）
         FAILED=$(find dl -size -1024c -not -empty 2>/dev/null | wc -l)
         EMPTY=$(find dl -empty 2>/dev/null | wc -l)
@@ -310,7 +298,7 @@ jobs:
 
     - name: Upload Bin Directory
       if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR == 'true'
-      uses: actions/upload-artifact@main
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
       with:
         name: ${{ env.SOURCE_REPO }}-bin-${{ env.DEVICE_TARGET }}-${{ env.DEVICE_SUBTARGET }}-${{ env.FILE_DATE }}
         path: ${{ env.OPENWRT_PATH }}/bin
@@ -328,14 +316,14 @@ jobs:
 
     - name: Upload Firmware To Artifact
       if: steps.compile.outputs.status == 'success' && env.FIRMWARE_RELEASE != 'true'
-      uses: actions/upload-artifact@main
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
       with:
         name: ${{ env.SOURCE_REPO }}-firmware-${{ env.DEVICE_TARGET }}-${{ env.DEVICE_SUBTARGET }}-${{ env.FILE_DATE }}
         path: ${{ env.FIRMWARE_PATH }}
 
     - name: Upload Firmware To Release
       if: steps.compile.outputs.status == 'success' && env.FIRMWARE_RELEASE == 'true'
-      uses: ncipollo/release-action@v1
+      uses: ncipollo/release-action@339a81892b84b4eeb0f6e744e4574d79d0d9b8dd
       with:
         name: R${{ env.DATE }} for ${{ env.FIRMWARE_TAG }}
         allowUpdates: true
@@ -355,4 +343,5 @@ jobs:
           ### 🧊 固件版本
           - 固件编译前最后一次➦[主源码](${{ env.REPO_URL }})更新记录
           - ${{ env.VERSION_INFO }}
+
 
