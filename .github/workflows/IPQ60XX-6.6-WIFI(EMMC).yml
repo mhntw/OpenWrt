@@ -198,6 +198,16 @@ jobs:
         echo "=== Device config after Force Single ==="
         grep -E 'DEVICE_jdcloud_re-ss-01|MULTI_PROFILE' .config || true
 
+    - name: Enable Custom Packages
+      run: |
+        cd $OPENWRT_PATH
+        # feeds install 之后重新追加被 make defconfig 删除的自定义包配置
+        echo 'CONFIG_PACKAGE_luci-app-ledctrl=y' >> .config
+        echo 'CONFIG_PACKAGE_luci-app-samba4=y' >> .config
+        make defconfig
+        echo "=== Custom packages after enable ==="
+        grep -E 'CONFIG_PACKAGE_luci-app-ledctrl|CONFIG_PACKAGE_luci-app-samba4' .config || true
+
     - name: Download DL Package
       run: |
         cd $OPENWRT_PATH
@@ -371,3 +381,4 @@ jobs:
           ### 🧊 固件版本
           - 固件编译前最后一次➦[主源码](${{ env.REPO_URL }})更新记录
           - ${{ env.VERSION_INFO }}
+
