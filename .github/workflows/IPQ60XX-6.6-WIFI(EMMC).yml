@@ -94,14 +94,6 @@ jobs:
         mixkey: ${{ env.SOURCE_REPO }}-${{ env.REPO_BRANCH }}-${{ env.DEVICE_TARGET }}-${{ env.DEVICE_SUBTARGET }}
         prefix: ${{ env.OPENWRT_PATH }}
 
-    - name: Install Feeds
-      run: |
-        cd $OPENWRT_PATH
-        ./scripts/feeds update -a
-        ./scripts/feeds install -a
-        # 删除冲突的 lucihttp cmake compat patch（tarball patch 已处理，无需重复）
-        rm -f feeds/luci/contrib/package/lucihttp/patches/001-cmake-compat.patch
-
     - name: Copy Local Custom Package
       run: |
         # 将仓库根目录的 package/ 目录（包含 luci-app-ledctrl）复制到 openwrt/package/
@@ -113,6 +105,14 @@ jobs:
         else
           echo "No local package directory found"
         fi
+
+    - name: Install Feeds
+      run: |
+        cd $OPENWRT_PATH
+        ./scripts/feeds update -a
+        ./scripts/feeds install -a
+        # 删除冲突的 lucihttp cmake compat patch（tarball patch 已处理，无需重复）
+        rm -f feeds/luci/contrib/package/lucihttp/patches/001-cmake-compat.patch
     - name: Fix Kconfig Circular Dependency
       run: |
         cd $OPENWRT_PATH
