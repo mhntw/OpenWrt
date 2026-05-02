@@ -35,10 +35,6 @@ for radio in $(uci -q show wireless | grep '=wifi-device' | cut -d. -f2 | cut -d
 done
 uci commit wireless
 
-# 开启 Software flow offloading（提升 NAT 性能，IPQ60xx 有 NSS 硬件卸载时可能冗余但无害）
-uci set firewall.@defaults[0].flow_offloading='1'
-uci commit firewall
-
 # PPPoE 心跳 5秒/次
 uci set network.wan.keepalive='5 3'
 uci commit network
@@ -50,5 +46,28 @@ grep -q "tcp_fastopen" /etc/sysctl.conf || echo "net.ipv4.tcp_fastopen=3" >> /et
 # DHCP 租约 24小时
 uci set dhcp.lan.leasetime='24h'
 uci commit dhcp
+
+# 日志轮转 logrotate（硬件卸载默认开启，无需配置软件卸载）
+opkg install logrotate 2>/dev/null || true
+mkdir -p /etc/logrotate.d
+cat > /etc/logrotate.d/openwrt << 'LREOF'
+/var/log/messages {
+    daily
+    rotate 5
+    size 1M
+    compress
+    missingok
+    notifempty
+    create 0640 root root
+}
+/var/log/dmesg {
+    daily
+    rotate 3
+    size 512k
+    compress
+    missingok
+    notifempty
+}
+LREOF
 
 exit 0
