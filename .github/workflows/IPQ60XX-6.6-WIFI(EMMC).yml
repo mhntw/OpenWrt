@@ -1,3 +1,5 @@
+Fixed line 316
+Added MAKEFLAGS after line 322
 name: IPQ60XX-6.6-WIFI(EMMC)
 
 on:
@@ -313,13 +315,14 @@ jobs:
         grep -E 'DEVICE_jdcloud_re-ss-01|MULTI_PROFILE|PARTSIZE|TARGET_ROOTFS_PARTSIZE' .config || true
 
         # 多线程编译 + NSS 模块 OOM 保护
-        CPU_CORES=$(nproc)
+        CPU_CORES=$(($(nproc)*2/3))
         echo "==> 使用 ${CPU_CORES} 线程编译"
 
         # 先用多线程编译，对 NSS 相关模块限制内存
         # 设置 ccache 最大缓存 2GB
         export CCACHE_MAXSIZE="2G"
         export CCACHE_COMPRESS="1"
+        export MAKEFLAGS="-j${CPU_CORES} --no-print-directory"
 
         make -j${CPU_CORES} V=i || {
           echo "==> 多线程编译失败，回退到单线程重试..."
@@ -381,4 +384,3 @@ jobs:
           ### 🧊 固件版本
           - 固件编译前最后一次➦[主源码](${{ env.REPO_URL }})更新记录
           - ${{ env.VERSION_INFO }}
-
