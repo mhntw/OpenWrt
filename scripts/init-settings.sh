@@ -7,8 +7,9 @@ uci set network.lan.ipaddr='192.168.1.1'
 uci set network.lan.netmask='255.255.255.0'
 uci commit network
 
-# DNS：使用国内公共 DNS
-uci set network.lan.dns='223.5.5.5 119.29.29.29'
+# DNS：使用国内公共 DNS（PPPoE 拒绝运营商 DNS）
+uci set network.wan.peerdns='0'
+uci set network.wan.dns='223.5.5.5 119.29.29.29'
 uci commit network
 
 # 重置主机名为 OpenWrt
@@ -75,3 +76,4 @@ cat > /etc/logrotate.d/openwrt << 'LREOF'
 LREOF
 
 exit 0
+
