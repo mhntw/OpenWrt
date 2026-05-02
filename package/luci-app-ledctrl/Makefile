@@ -4,7 +4,7 @@ LUCI_TITLE:=LuCI - LED Control
 LUCI_DEPENDS:=
 LUCI_PKGARCH:=all
 
-include ../../luci.mk
+include $(TOPDIR)/feeds/luci/luci.mk
 
 define Package/luci-app-ledctrl/install
 	$(INSTALL_DIR) $(1)/usr/lib/lua/luci/controller/admin
