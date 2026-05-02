@@ -102,6 +102,17 @@ jobs:
         # 删除冲突的 lucihttp cmake compat patch（tarball patch 已处理，无需重复）
         rm -f feeds/luci/contrib/package/lucihttp/patches/001-cmake-compat.patch
 
+    - name: Copy Local Custom Package
+      run: |
+        # 将仓库根目录的 package/ 目录（包含 luci-app-ledctrl）复制到 openwrt/package/
+        cd $GITHUB_WORKSPACE
+        if [ -d "package" ] && [ -n "$(ls -A package 2>/dev/null)" ]; then
+          cp -r package/* $OPENWRT_PATH/package/
+          echo "=== Local custom package copied ==="
+          ls -la $OPENWRT_PATH/package/ | grep ledctrl || echo "ledctrl not found"
+        else
+          echo "No local package directory found"
+        fi
     - name: Fix Kconfig Circular Dependency
       run: |
         cd $OPENWRT_PATH
@@ -360,5 +371,3 @@ jobs:
           ### 🧊 固件版本
           - 固件编译前最后一次➦[主源码](${{ env.REPO_URL }})更新记录
           - ${{ env.VERSION_INFO }}
-
-
