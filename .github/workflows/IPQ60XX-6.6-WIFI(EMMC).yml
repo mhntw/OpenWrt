@@ -113,18 +113,6 @@ jobs:
         ./scripts/feeds install -a
         # 删除冲突的 lucihttp cmake compat patch（tarball patch 已处理，无需重复）
         rm -f feeds/luci/contrib/package/lucihttp/patches/001-cmake-compat.patch
-    - name: Enable Custom Packages
-      run: |
-        cd $OPENWRT_PATH
-        # make defconfig 在 feeds install 之前运行时会把自定义包从 .config 剔除
-        # 因为那时 feeds 还没安装，找不到这些包
-        # 现在 feeds 已安装，重新加入自定义包配置并重新解析
-        echo "CONFIG_PACKAGE_luci-app-ledctrl=y" >> .config
-        echo "CONFIG_PACKAGE_luci-app-samba4=y" >> .config
-        make defconfig
-        echo "=== Custom packages in config ==="
-        grep -E 'ledctrl|samba4' .config || echo "WARNING: custom packages not found in config"
-
     - name: Fix Kconfig Circular Dependency
       run: |
         cd $OPENWRT_PATH
@@ -209,6 +197,16 @@ jobs:
         make defconfig
         echo "=== Device config after Force Single ==="
         grep -E 'DEVICE_jdcloud_re-ss-01|MULTI_PROFILE' .config || true
+
+    - name: Enable Custom Packages
+      run: |
+        cd $OPENWRT_PATH
+        # 在 feeds install 和 make defconfig 全部完成后，重新加入自定义包配置
+        # 避免 make defconfig 把自定义包从 .config 剔除
+        echo "CONFIG_PACKAGE_luci-app-ledctrl=y" >> .config
+        echo "CONFIG_PACKAGE_luci-app-samba4=y" >> .config
+        echo "=== Custom packages added to config ==="
+        grep -E 'ledctrl|samba4' .config || echo "WARNING: custom packages not found in config"
 
     - name: Download DL Package
       run: |
@@ -383,3 +381,4 @@ jobs:
           ### 🧊 固件版本
           - 固件编译前最后一次➦[主源码](${{ env.REPO_URL }})更新记录
           - ${{ env.VERSION_INFO }}
+
