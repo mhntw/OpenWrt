@@ -12,6 +12,10 @@ uci set network.wan.peerdns='0'
 uci set network.wan.dns='223.5.5.5 119.29.29.29'
 uci commit network
 
+# dnsmasq 上游 DNS（LAN 客户端使用）
+uci set dhcp.@dnsmasq[0].server='223.5.5.5 119.29.29.29'
+uci commit dhcp
+
 # 重置主机名为 OpenWrt
 uci set system.@system[0].hostname='OpenWrt'
 uci commit system
@@ -76,4 +80,5 @@ cat > /etc/logrotate.d/openwrt << 'LREOF'
 LREOF
 
 exit 0
+
 
