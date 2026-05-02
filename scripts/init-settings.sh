@@ -7,6 +7,10 @@ uci set network.lan.ipaddr='192.168.1.1'
 uci set network.lan.netmask='255.255.255.0'
 uci commit network
 
+# DNS：使用国内公共 DNS
+uci set network.lan.dns='223.5.5.5 119.29.29.29'
+uci commit network
+
 # 重置主机名为 OpenWrt
 uci set system.@system[0].hostname='OpenWrt'
 uci commit system
@@ -15,21 +19,21 @@ uci commit system
 rm -f /etc/config/wireless
 wifi config
 
-# 配置 WiFi：SSID=huawei，密码=abc123abc，SAE-Mixed (WPA2+WPA3)
+# 配置 WiFi：SSID=huawei，密码=abc123abc，WPA2 (中等安全性)
 for radio in $(uci -q show wireless | grep '=wifi-device' | cut -d. -f2 | cut -d= -f1); do
     uci set wireless.${radio}.disabled='0'
     uci set wireless.${radio}.country='CN'
-    
+
     # 5G 信道改为 Auto
     band=$(uci -q get wireless.${radio}.band)
     if [ "$band" = "5g" ]; then
         uci set wireless.${radio}.channel='auto'
     fi
-    
+
     iface="default_${radio}"
     if uci -q get wireless.${iface} >/dev/null 2>&1; then
         uci set wireless.${iface}.ssid='huawei'
-        uci set wireless.${iface}.encryption='sae-mixed'
+        uci set wireless.${iface}.encryption='psk2'
         uci set wireless.${iface}.key='abc123abc'
     fi
 done
@@ -47,7 +51,7 @@ grep -q "tcp_fastopen" /etc/sysctl.conf || echo "net.ipv4.tcp_fastopen=3" >> /et
 uci set dhcp.lan.leasetime='24h'
 uci commit dhcp
 
-# 日志轮转 logrotate（硬件卸载默认开启，无需配置软件卸载）
+# 日志轮转 logrotate
 opkg install logrotate 2>/dev/null || true
 mkdir -p /etc/logrotate.d
 cat > /etc/logrotate.d/openwrt << 'LREOF'
