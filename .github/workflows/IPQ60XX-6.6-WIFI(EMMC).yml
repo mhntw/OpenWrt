@@ -1,5 +1,3 @@
-Fixed line 316
-Added MAKEFLAGS after line 322
 name: IPQ60XX-6.6-WIFI(EMMC)
 
 on:
