@@ -300,25 +300,23 @@ jobs:
 
     - name: Verify & Rebuild Host Tools
       run: |
-        # 如果 staging_dir/host/bin 缺失 m4/flex 等关键工具，手动构建
-        # （cachewrtbuild 的 toolchain 缓存可能只包含 ccache，不包含完整 host toolchain）
+        # 删除 toolchain 缓存后，需要完整重建 tools 和 toolchain
+        # 只编译个别 tools 会导致 automake 等依赖链断裂（如 libffi all-configured 错误）
         cd "$OPENWRT_PATH"
         
         echo "=== Checking host tools ==="
-        MISSING=""
+        NEED_REBUILD=""
         for tool in m4 flex xz; do
           if [ ! -f "staging_dir/host/bin/$tool" ]; then
-            MISSING="$MISSING $tool"
+            NEED_REBUILD="yes"
+            break
           fi
         done
         
-        if [ -n "$MISSING" ]; then
-          echo "Missing tools:$MISSING"
-          echo "=== Rebuilding host tools ==="
-          make tools/m4/compile -j$(nproc) V=s || true
-          make tools/flex/compile -j$(nproc) V=s || true
-          make tools/xz/compile -j$(nproc) V=s || true
-          echo "=== Host tools rebuild done ==="
+        if [ -n "$NEED_REBUILD" ]; then
+          echo "=== Rebuilding full tools chain ==="
+          make tools/install -j$(nproc) V=s || true
+          echo "=== Tools rebuild done ==="
         else
           echo "All host tools present, skipping rebuild"
         fi
