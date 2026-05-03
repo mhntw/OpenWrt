@@ -309,15 +309,16 @@ jobs:
       run: |
         cd "$OPENWRT_PATH"
         # gnutls-3.8.3 的 gnulib 依赖缺少 stdbool.h，导致编译错误
-        # 修复：向全局 .config 注入编译标志
+        # 修复：向全局 TARGET_CFLAGS 注入 stdbool.h
         if ! grep -q 'stdbool' .config; then
-          echo 'CONFIG_TARGET_CFLAGS:EXTRA+=" -include stdbool.h"' >> .config
-          echo 'CONFIG_TARGET_OPTIMIZATION:EXTRA+=" -include stdbool.h"' >> .config
-          echo '==> Added stdbool.h include to CFLAGS'
+          echo 'CONFIG_TARGET_CFLAGS_EXTRA="-include stdbool.h"' >> .config
+          echo 'CONFIG_CCACHEFLAGS_EXTRA="-include stdbool.h"' >> .config
+          echo '==> Added -include stdbool.h to CFLAGS'
         else
           echo '==> stdbool.h already in config'
         fi
-        grep -E 'stdbool' .config || true
+        echo "=== CFLAGS check ==="
+        grep -E 'CFLAGS|stdbool' .config | head -5
 
     - name: Compile Firmware
       id: compile
