@@ -310,65 +310,30 @@ jobs:
       run: |
         cd "$OPENWRT_PATH"
         
-        
-        
-        
-        # ========== gnutls gnulib stdbool.h 修复 ==========
-        echo "=== Patching gnutls tarball ==="
-        # 下载原始 tarball，解压，修改 gnulib 源文件，重新打包替换 dl/ 里的版本
-        # 先跳过 PKG_HASH（替换 tarball 后 hash 不匹配）
-        GNUTLS_MK="feeds/packages/gnutls/Makefile"
-        if [ -f "$GNUTLS_MK" ]; then
-          sed -i 's|^PKG_HASH:=.*|PKG_HASH:=skip|' "$GNUTLS_MK"
-          echo "==> Skipped PKG_HASH"
-        fi
-        # 然后再下载（skip hash 之后下载不会报 hash 错误）
-        make package/gnutls/download 2>/dev/null || true
-        DL_ORIG=$(find dl -name "gnutls-3.8.3*" 2>/dev/null | grep -v sig | head -1)
-        if [ -n "$DL_ORIG" ]; then
-          echo "==> Found tarball: $DL_ORIG"
-          TMPDIR=$(mktemp -d)
-          BASENAME=$(basename "$DL_ORIG" .gz)
-          BASENAME=$(basename "$BASENAME" .xz)
-          BASENAME=$(basename "$BASENAME" .bz2)
-          tar xf "$DL_ORIG" -C "$TMPDIR" 2>/dev/null
-          GNUTLS_SRC=$(find "$TMPDIR" -type d -name "gnutls-*" | head -1)
-          if [ -n "$GNUTLS_SRC" ]; then
-            for f in $(find "$GNUTLS_SRC" -name "basename-lgpl.c" 2>/dev/null); do
-              if ! grep -q "stdbool.h" "$f"; then
-                sed -i '1i #include <stdbool.h>' "$f"
-                echo "==> Patched: $(basename $f)"
-              fi
-            done
-            # 重新打包
-            cd "$TMPDIR"
-            if [[ "$DL_ORIG" == *.xz ]]; then
-              tar cf - "$(basename $GNUTLS_SRC)" | xz -9 > "$HOME/gnutls-patched.tar.xz"
-            elif [[ "$DL_ORIG" == *.gz ]]; then
-              tar cf - "$(basename $GNUTLS_SRC)" | gzip -9 > "$HOME/gnutls-patched.tar.gz"
-            else
-              tar cf - "$(basename $GNUTLS_SRC)" > "$HOME/gnutls-patched.tar"
-            fi
-            # 替换 dl/ 中的原版
-            cp "$DL_ORIG" "$HOME/gnutls-orig.$(basename $DL_ORIG)"
-            cp "$HOME/gnutls-patched.tar"* "$(dirname $DL_ORIG)/" 2>/dev/null || cp "$HOME/gnutls-patched.tar"* dl/ 2>/dev/null || true
-            echo "==> Replaced tarball in dl/"
-          # 跳过 PKG_HASH 校验（替换 tarball 后 hash 不匹配）
-          GNUTLS_MK="feeds/packages/gnutls/Makefile"
-          if [ -f "$GNUTLS_MK" ]; then
-            sed -i 's|^PKG_HASH:=.*|PKG_HASH:=skip|' "$GNUTLS_MK"
-            echo "==> Skipped PKG_HASH for patched tarball"
+        # ========== gnutls gnulib stdbool.h 修复（直接打 build_dir 源码）==========
+        echo "=== Patching gnutls build_dir ==="
+        for f in $(find build_dir -path '*gnutls*basename-lgpl.c' 2>/dev/null); do
+          if ! grep -q "stdbool.h" "$f"; then
+            sed -i '1i #include <stdbool.h>' "$f"
+            echo "==> Patched: $f"
           fi
-
-          fi
-          rm -rf "$TMPDIR"
-        else
-          echo "==> gnutls tarball not found, trying dl download..."
-          make download/gnutls 2>/dev/null || true
-          DL_ORIG=$(find dl -name "gnutls-3.8.3*" 2>/dev/null | grep -v sig | head -1)
-          echo "After retry: $DL_ORIG"
-        fi
+        done
         echo "=== gnutls patch done ==="
+        
+        # ========== 编译 ==========
+        MAKE_JOBS=$(nproc)
+        echo "==> Compiling with $MAKE_JOBS jobs"
+        
+        make -j$MAKE_JOBS V=s CCACHE_BASEDIR="$(pwd)"           CC="ccache $CROSS_COMPILE-gcc"           CXX="ccache $CROSS_COMPILE-g++" 2>&1 | tee compile.log
+        
+        if [ ${PIPESTATUS[0]} -eq 0 ]; then
+          echo "::set-output name=status::success"
+        else
+          # 打印最后 50 行错误日志
+          echo "=== Last 50 lines of error ==="
+          tail -50 compile.log | grep -E "error:|make.*error|Error" || tail -50 compile.log
+          exit 1
+        fi
 
     - name: Check Space Usage
       if: (!cancelled())
