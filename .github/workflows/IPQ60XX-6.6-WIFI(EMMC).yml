@@ -331,58 +331,23 @@ jobs:
         cd "$OPENWRT_PATH"
         
         
+        
         # ========== gnutls gnulib stdbool.h 修复 ==========
         echo "=== Patching gnutls gnulib source ==="
-        # 先强制下载 gnutls 源码到 dl/
-        make package/gnutls/download 2>/dev/null || true
-        # 找 gnutls 下载后的路径
-        GNUTLS_DL=$(find dl -name "gnutls-*.tar*" 2>/dev/null | head -1)
-        if [ -n "$GNUTLS_DL" ]; then
-          echo "==> Found gnutls tarball: $GNUTLS_DL"
-          # 解压到临时目录
-          TMPDIR=$(mktemp -d)
-          tar xzf "$GNUTLS_DL" -C "$TMPDIR" --strip-components=1 2>/dev/null
-          # 找到 gnulib 源文件并打补丁
-          for f in $(find "$TMPDIR" -name "basename-lgpl.c" 2>/dev/null); do
-            if ! grep -q "stdbool.h" "$f"; then
-              sed -i '1i #include <stdbool.h>' "$f"
-              echo "==> Patched: $(basename $(dirname $f))/$(basename $f)"
-            fi
-          done
-          # 把补丁文件复制到编译时的源码目录
-          # 编译系统解压时会用到 dl/ 里的 tarball，所以直接把补丁注入 tarball 内的文件不行
-          # 改用 post-download 钩子方式
-          rm -rf "$TMPDIR"
-        fi
-        # 找到已解压的 gnutls 源码（编译过程中已提取）
-        GNUTLS_BUILT=$(find build_dir -type d -name "gnutls-3.8.3" 2>/dev/null | grep -v toolchain | head -1)
-        if [ -n "$GNUTLS_BUILT" ]; then
-          for f in $(find "$GNUTLS_BUILT" -name "basename-lgpl.c" 2>/dev/null); do
-            if ! grep -q "stdbool.h" "$f"; then
-              sed -i '1i #include <stdbool.h>' "$f"
-              echo "==> Patched: $f"
-            fi
-          done
-        else
-          echo "==> gnutls build dir not yet extracted, will patch during make..."
+        # 方法：修改 gnutls Makefile 的 Build/Prepare，在提取后打补丁
+        GNUTLS_MK="package/feeds/packages/gnutls/Makefile"
+        if [ -f "$GNUTLS_MK" ]; then
+          # 检查是否已修复
+          if grep -q "stdbool_hack" "$GNUTLS_MK"; then
+            echo "==> Already patched"
+          else
+            # 在 Build/Prepare 之后添加 post-extract hook
+            sed -i '/define Build\/Prepare/e sed -i "1i #include <stdbool.h>" $(PKG_BUILD_DIR)/gl/basename-lgpl.c 2>/dev/null || true' "$GNUTLS_MK"
+            echo "==> Modified gnutls Build/Prepare"
+            grep -n "stdbool_hack\|basename-lgpl" "$GNUTLS_MK" | head -5
+          fi
         fi
         echo "=== gnutls patch done ==="
-cho "=== Final device config ==="
-        grep -E 'DEVICE_jdcloud_re-ss-01|MULTI_PROFILE|PARTSIZE|TARGET_ROOTFS_PARTSIZE' .config || true
-
-        # 多线程编译 + NSS 模块 OOM 保护
-        CPU_CORES=$(($(nproc)*2/3))
-        echo "==> 使用 ${CPU_CORES} 线程编译"
-
-        # 设置 ccache 最大缓存 2GB
-        export CCACHE_MAXSIZE="2G"
-        export CCACHE_COMPRESS="1"
-        export MAKEFLAGS="-j${CPU_CORES} --no-print-directory"
-
-        make -j${CPU_CORES} V=i || {
-          echo "==> 多线程编译失败，回退到单线程重试..."
-          make -j1 V=s
-        }
 
     - name: Check Space Usage
       if: (!cancelled())
