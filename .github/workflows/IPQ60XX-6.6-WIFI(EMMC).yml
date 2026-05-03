@@ -305,18 +305,13 @@ jobs:
         
         echo "=== APK version fix applied ==="
 
-    - name: Fix gnutls bool type
+    - name: Prepare Build Directory
       run: |
         cd "$OPENWRT_PATH"
-        # gnutls-3.8.3 的 gnulib 库 basename-lgpl.c 缺少 stdbool.h
-        # 修复：直接在源文件第一行后插入 #include <stdbool.h>
-        GNUTLS_SRC="package/feeds/packages/gnutls/patches"
-        if [ -d "$GNUTLS_SRC" ]; then
-          echo "==> Checking for gnulib sources in patches dir..."
-          ls "$GNUTLS_SRC"/ | grep -E 'gnutls|lib' | head -5
-        fi
-        # 找源文件
-        PKG_BUILD_DIR=$(find build_dir -type d -name "gnutls-*" 2>/dev/null | head -1)
+        # 预处理：下载并提取 gnutls 源码，预打 stdbool.h 补丁
+        # gnutls-3.8.3 gnulib 库 basename-lgpl.c 缺少 stdbool.h
+        make package/gnutls/download -j1 V=s 2>/dev/null || true
+        PKG_BUILD_DIR=$(find build_dir -type d -name "gnutls-3.8.3" 2>/dev/null | head -1)
         if [ -n "$PKG_BUILD_DIR" ]; then
           echo "==> Found gnutls build dir: $PKG_BUILD_DIR"
           for f in $(find "$PKG_BUILD_DIR" -name "basename-lgpl.c" 2>/dev/null); do
@@ -326,9 +321,11 @@ jobs:
             fi
           done
         else
-          echo "==> gnutls build dir not found yet (will appear during compile)"
+          echo "==> gnutls build dir not found, will patch during compilation"
+          # 确保 feeds 安装完成，触发下载
+          make download 2>/dev/null || true
         fi
-        echo "=== Fix gnutls done ==="
+        echo "=== Prepare done ==="
 
     - name: Compile Firmware
       id: compile
