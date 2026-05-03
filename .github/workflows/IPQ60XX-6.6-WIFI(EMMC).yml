@@ -308,22 +308,22 @@ jobs:
     - name: Prepare Build Directory
       run: |
         cd "$OPENWRT_PATH"
-        # gnutls-3.8.3 的 gnulib 依赖 basename-lgpl.c 缺少 stdbool.h
-        # 修复：sed 修改 gnutls Makefile，在 Build/Compile 调用前加入 -include stdbool.h
+        # gnutls-3.8.3 gnulib basename-lgpl.c 缺少 stdbool.h
+        # 修复：在 gnutls Makefile 的 CFLAGS 变量中加入 -include stdbool.h
         GNUTLS_MK="package/feeds/packages/gnutls/Makefile"
         if [ -f "$GNUTLS_MK" ]; then
           if grep -q "stdbool" "$GNUTLS_MK"; then
-            echo "==> stdbool already patched in gnutls Makefile"
+            echo "==> Already patched"
           else
-            sed -i 's|CFLAGS :=|CFLAGS := -include stdbool.h|' "$GNUTLS_MK"
-            echo "==> Patched gnutls Makefile CFLAGS"
-            grep -n "stdbool\|CFLAGS :=" "$GNUTLS_MK" | head -5
+            sed -i 's|^CFLAGS *:=|CFLAGS += -include stdbool.h\nCFLAGS :=|' "$GNUTLS_MK"
+            echo "==> CFLAGS patched:"
+            grep -n "stdbool" "$GNUTLS_MK"
           fi
         else
-          echo "==> gnutls Makefile not found: $GNUTLS_MK"
+          echo "==> gnutls Makefile not found"
           find package/feeds -name "Makefile" -path "*/gnutls/*" 2>/dev/null | head -3
         fi
-        echo "=== Prepare done ==="
+        echo "=== Done ==="
 
     - name: Compile Firmware
       id: compile
