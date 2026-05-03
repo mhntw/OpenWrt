@@ -311,7 +311,7 @@ jobs:
         # 导致编译错误: error: unknown type name 'bool'
         # 创建 quilt patch 文件，OpenWrt build 系统会自动应用
         cd $OPENWRT_PATH
-        
+        cd $OPENWRT_PATH
         mkdir -p package/feeds/packages/gnutls/patches
         cat > package/feeds/packages/gnutls/patches/001-include-stdbool.patch << 'EOF'
 --- a/gl/basename-lgpl.c
@@ -405,4 +405,5 @@ EOF
           ### 🧊 固件版本
           - 固件编译前最后一次➦[主源码](${{ env.REPO_URL }})更新记录
           - ${{ env.VERSION_INFO }}
+
 
