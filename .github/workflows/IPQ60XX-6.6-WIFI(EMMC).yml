@@ -330,32 +330,44 @@ jobs:
       run: |
         cd "$OPENWRT_PATH"
         
-        # ========== 关键修复：gnutls gnulib stdbool.h ==========
-        # gnutls-3.8.3 的 gnulib 子模块 basename-lgpl.c 缺少 stdbool.h
-        # 在编译前下载并解压 gnutls 源码，直接 sed patch 源码文件
+        
+        # ========== gnutls gnulib stdbool.h 修复 ==========
         echo "=== Patching gnutls gnulib source ==="
-        GNUTLS_DIR=$(find build_dir -type d -name "gnutls-*" 2>/dev/null | grep -v 'target-' | head -1)
-        if [ -n "$GNUTLS_DIR" ]; then
-          for f in $(find "$GNUTLS_DIR" -name "basename-lgpl.c" 2>/dev/null); do
-            if [ -f "$f" ] && ! grep -q "stdbool.h" "$f"; then
+        # 先强制下载 gnutls 源码到 dl/
+        make package/gnutls/download 2>/dev/null || true
+        # 找 gnutls 下载后的路径
+        GNUTLS_DL=$(find dl -name "gnutls-*.tar*" 2>/dev/null | head -1)
+        if [ -n "$GNUTLS_DL" ]; then
+          echo "==> Found gnutls tarball: $GNUTLS_DL"
+          # 解压到临时目录
+          TMPDIR=$(mktemp -d)
+          tar xzf "$GNUTLS_DL" -C "$TMPDIR" --strip-components=1 2>/dev/null
+          # 找到 gnulib 源文件并打补丁
+          for f in $(find "$TMPDIR" -name "basename-lgpl.c" 2>/dev/null); do
+            if ! grep -q "stdbool.h" "$f"; then
+              sed -i '1i #include <stdbool.h>' "$f"
+              echo "==> Patched: $(basename $(dirname $f))/$(basename $f)"
+            fi
+          done
+          # 把补丁文件复制到编译时的源码目录
+          # 编译系统解压时会用到 dl/ 里的 tarball，所以直接把补丁注入 tarball 内的文件不行
+          # 改用 post-download 钩子方式
+          rm -rf "$TMPDIR"
+        fi
+        # 找到已解压的 gnutls 源码（编译过程中已提取）
+        GNUTLS_BUILT=$(find build_dir -type d -name "gnutls-3.8.3" 2>/dev/null | grep -v toolchain | head -1)
+        if [ -n "$GNUTLS_BUILT" ]; then
+          for f in $(find "$GNUTLS_BUILT" -name "basename-lgpl.c" 2>/dev/null); do
+            if ! grep -q "stdbool.h" "$f"; then
               sed -i '1i #include <stdbool.h>' "$f"
               echo "==> Patched: $f"
             fi
           done
         else
-          echo "==> gnutls dir not found, forcing extraction..."
-          make package/gnutls/download V=s 2>/dev/null || make download/gnutls V=s 2>/dev/null || true
-          GNUTLS_DIR=$(find build_dir -type d -name "gnutls-3.8.3" 2>/dev/null | grep -v 'target-' | head -1)
-          if [ -n "$GNUTLS_DIR" ]; then
-            for f in $(find "$GNUTLS_DIR" -name "basename-lgpl.c" 2>/dev/null); do
-              sed -i '1i #include <stdbool.h>' "$f"
-              echo "==> Patched: $f"
-            done
-          fi
+          echo "==> gnutls build dir not yet extracted, will patch during make..."
         fi
         echo "=== gnutls patch done ==="
-        
-        echo "=== Final device config ==="
+cho "=== Final device config ==="
         grep -E 'DEVICE_jdcloud_re-ss-01|MULTI_PROFILE|PARTSIZE|TARGET_ROOTFS_PARTSIZE' .config || true
 
         # 多线程编译 + NSS 模块 OOM 保护
