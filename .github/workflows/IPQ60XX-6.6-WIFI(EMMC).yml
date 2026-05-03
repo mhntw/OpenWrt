@@ -113,6 +113,17 @@ jobs:
         ./scripts/feeds install -a
         # 删除冲突的 lucihttp cmake compat patch（tarball patch 已处理，无需重复）
         rm -f feeds/luci/contrib/package/lucihttp/patches/001-cmake-compat.patch
+
+    - name: Enable Custom Packages
+      run: |
+        cd $OPENWRT_PATH
+        # 启用自定义包（ledctrl/samba4）
+        echo 'CONFIG_PACKAGE_luci-app-ledctrl=y' >> .config
+        echo 'CONFIG_PACKAGE_luci-app-samba4=y' >> .config
+        make defconfig
+        echo "=== Custom packages enabled ==="
+        grep -E 'ledctrl|samba4' .config || true
+
     - name: Fix Kconfig Circular Dependency
       run: |
         cd $OPENWRT_PATH
