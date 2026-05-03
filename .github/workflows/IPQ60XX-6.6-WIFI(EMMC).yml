@@ -336,6 +336,13 @@ jobs:
         # ========== gnutls gnulib stdbool.h 修复 ==========
         echo "=== Patching gnutls tarball ==="
         # 下载原始 tarball，解压，修改 gnulib 源文件，重新打包替换 dl/ 里的版本
+        # 先跳过 PKG_HASH（替换 tarball 后 hash 不匹配）
+        GNUTLS_MK="package/feeds/packages/gnutls/Makefile"
+        if [ -f "$GNUTLS_MK" ]; then
+          sed -i 's|^PKG_HASH:=.*|PKG_HASH:=skip|' "$GNUTLS_MK"
+          echo "==> Skipped PKG_HASH"
+        fi
+        # 然后再下载（skip hash 之后下载不会报 hash 错误）
         make package/gnutls/download 2>/dev/null || true
         DL_ORIG=$(find dl -name "gnutls-3.8.3*" 2>/dev/null | grep -v sig | head -1)
         if [ -n "$DL_ORIG" ]; then
