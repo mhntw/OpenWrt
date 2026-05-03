@@ -321,7 +321,10 @@ jobs:
           echo ' /* Return the address of the last file name component of FILENAME.'
           echo '    If FILENAME has no file name components, then return FILENAME.'
         } > package/feeds/packages/gnutls/patches/001-include-stdbool.patch
-        echo "==> Created gnutls patch"
+        # 将 patch 注册到 quilt series（OpenWrt quilt 系统要求）
+        echo "001-include-stdbool.patch" >> package/feeds/packages/gnutls/patches/series
+        echo "==> Created gnutls patch and registered in quilt series"
+        cat package/feeds/packages/gnutls/patches/series || echo "(series file may not exist yet)"
         cat package/feeds/packages/gnutls/patches/001-include-stdbool.patch
 
     - name: Compile Firmware
