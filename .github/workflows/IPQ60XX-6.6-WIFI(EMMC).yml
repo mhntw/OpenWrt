@@ -342,7 +342,7 @@ jobs:
         MAKE_JOBS=$(nproc)
         echo "==> Compiling with $MAKE_JOBS jobs"
         
-        make -j$MAKE_JOBS V=s CCACHE_BASEDIR="$(pwd)"           CC="ccache $CROSS_COMPILE-gcc"           CXX="ccache $CROSS_COMPILE-g++" 2>&1 | tee compile.log
+        make -j$MAKE_JOBS V=s 2>&1 | tee compile.log
         
         if [ ${PIPESTATUS[0]} -eq 0 ]; then
           echo "::set-output name=status::success"
