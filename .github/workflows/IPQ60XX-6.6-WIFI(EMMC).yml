@@ -328,7 +328,33 @@ jobs:
     - name: Compile Firmware
       id: compile
       run: |
-        cd $OPENWRT_PATH
+        cd "$OPENWRT_PATH"
+        
+        # ========== 关键修复：gnutls gnulib stdbool.h ==========
+        # gnutls-3.8.3 的 gnulib 子模块 basename-lgpl.c 缺少 stdbool.h
+        # 在编译前下载并解压 gnutls 源码，直接 sed patch 源码文件
+        echo "=== Patching gnutls gnulib source ==="
+        GNUTLS_DIR=$(find build_dir -type d -name "gnutls-*" 2>/dev/null | grep -v 'target-' | head -1)
+        if [ -n "$GNUTLS_DIR" ]; then
+          for f in $(find "$GNUTLS_DIR" -name "basename-lgpl.c" 2>/dev/null); do
+            if [ -f "$f" ] && ! grep -q "stdbool.h" "$f"; then
+              sed -i '1a\\n#include <stdbool.h>' "$f"
+              echo "==> Patched: $f"
+            fi
+          done
+        else
+          echo "==> gnutls dir not found, forcing extraction..."
+          make package/gnutls/download V=s 2>/dev/null || make download/gnutls V=s 2>/dev/null || true
+          GNUTLS_DIR=$(find build_dir -type d -name "gnutls-3.8.3" 2>/dev/null | grep -v 'target-' | head -1)
+          if [ -n "$GNUTLS_DIR" ]; then
+            for f in $(find "$GNUTLS_DIR" -name "basename-lgpl.c" 2>/dev/null); do
+              sed -i '1a\\n#include <stdbool.h>' "$f"
+              echo "==> Patched: $f"
+            done
+          fi
+        fi
+        echo "=== gnutls patch done ==="
+        
         echo "=== Final device config ==="
         grep -E 'DEVICE_jdcloud_re-ss-01|MULTI_PROFILE|PARTSIZE|TARGET_ROOTFS_PARTSIZE' .config || true
 
@@ -336,7 +362,6 @@ jobs:
         CPU_CORES=$(($(nproc)*2/3))
         echo "==> 使用 ${CPU_CORES} 线程编译"
 
-        # 先用多线程编译，对 NSS 相关模块限制内存
         # 设置 ccache 最大缓存 2GB
         export CCACHE_MAXSIZE="2G"
         export CCACHE_COMPRESS="1"
@@ -346,10 +371,6 @@ jobs:
           echo "==> 多线程编译失败，回退到单线程重试..."
           make -j1 V=s
         }
-
-        echo "status=success" >> $GITHUB_OUTPUT
-        echo "DATE=$(date +"%Y-%m-%d %H:%M:%S")" >> $GITHUB_ENV
-        echo "FILE_DATE=$(date +"%Y.%m.%d")" >> $GITHUB_ENV
 
     - name: Check Space Usage
       if: (!cancelled())
