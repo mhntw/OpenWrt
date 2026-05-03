@@ -332,20 +332,47 @@ jobs:
         
         
         
+        
         # ========== gnutls gnulib stdbool.h 修复 ==========
-        echo "=== Patching gnutls gnulib source ==="
-        # 方法：修改 gnutls Makefile 的 Build/Prepare，在提取后打补丁
-        GNUTLS_MK="package/feeds/packages/gnutls/Makefile"
-        if [ -f "$GNUTLS_MK" ]; then
-          # 检查是否已修复
-          if grep -q "stdbool_hack" "$GNUTLS_MK"; then
-            echo "==> Already patched"
-          else
-            # 在 Build/Prepare 之后添加 post-extract hook
-            sed -i '/define Build\/Prepare/e sed -i "1i #include <stdbool.h>" $(PKG_BUILD_DIR)/gl/basename-lgpl.c 2>/dev/null || true' "$GNUTLS_MK"
-            echo "==> Modified gnutls Build/Prepare"
-            grep -n "stdbool_hack\|basename-lgpl" "$GNUTLS_MK" | head -5
+        echo "=== Patching gnutls tarball ==="
+        # 下载原始 tarball，解压，修改 gnulib 源文件，重新打包替换 dl/ 里的版本
+        make package/gnutls/download 2>/dev/null || true
+        DL_ORIG=$(find dl -name "gnutls-3.8.3*" 2>/dev/null | grep -v sig | head -1)
+        if [ -n "$DL_ORIG" ]; then
+          echo "==> Found tarball: $DL_ORIG"
+          TMPDIR=$(mktemp -d)
+          BASENAME=$(basename "$DL_ORIG" .gz)
+          BASENAME=$(basename "$BASENAME" .xz)
+          BASENAME=$(basename "$BASENAME" .bz2)
+          tar xf "$DL_ORIG" -C "$TMPDIR" 2>/dev/null
+          GNUTLS_SRC=$(find "$TMPDIR" -type d -name "gnutls-*" | head -1)
+          if [ -n "$GNUTLS_SRC" ]; then
+            for f in $(find "$GNUTLS_SRC" -name "basename-lgpl.c" 2>/dev/null); do
+              if ! grep -q "stdbool.h" "$f"; then
+                sed -i '1i #include <stdbool.h>' "$f"
+                echo "==> Patched: $(basename $f)"
+              fi
+            done
+            # 重新打包
+            cd "$TMPDIR"
+            if [[ "$DL_ORIG" == *.xz ]]; then
+              tar cf - "$(basename $GNUTLS_SRC)" | xz -9 > "$HOME/gnutls-patched.tar.xz"
+            elif [[ "$DL_ORIG" == *.gz ]]; then
+              tar cf - "$(basename $GNUTLS_SRC)" | gzip -9 > "$HOME/gnutls-patched.tar.gz"
+            else
+              tar cf - "$(basename $GNUTLS_SRC)" > "$HOME/gnutls-patched.tar"
+            fi
+            # 替换 dl/ 中的原版
+            cp "$DL_ORIG" "$HOME/gnutls-orig.$(basename $DL_ORIG)"
+            cp "$HOME/gnutls-patched.tar"* "$(dirname $DL_ORIG)/" 2>/dev/null || cp "$HOME/gnutls-patched.tar"* dl/ 2>/dev/null || true
+            echo "==> Replaced tarball in dl/"
           fi
+          rm -rf "$TMPDIR"
+        else
+          echo "==> gnutls tarball not found, trying dl download..."
+          make download/gnutls 2>/dev/null || true
+          DL_ORIG=$(find dl -name "gnutls-3.8.3*" 2>/dev/null | grep -v sig | head -1)
+          echo "After retry: $DL_ORIG"
         fi
         echo "=== gnutls patch done ==="
 
