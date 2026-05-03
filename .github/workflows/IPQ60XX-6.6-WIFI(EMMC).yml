@@ -198,6 +198,14 @@ jobs:
         done
         echo "=== Fixed $FIXED inline CMakeLists.txt files ==="
 
+    - name: Build Tools (For CACHE_TOOLCHAIN=false)
+      if: env.CACHE_TOOLCHAIN != 'true'
+      run: |
+        cd $OPENWRT_PATH
+        echo "=== Building tools (toolchain) since CACHE_TOOLCHAIN is disabled ==="
+        make tools/install V=s
+        echo "=== Tools build complete ==="
+
     - name: Force Single Device Build
       run: |
         cd $OPENWRT_PATH
