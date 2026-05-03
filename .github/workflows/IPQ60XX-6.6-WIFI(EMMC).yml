@@ -307,22 +307,17 @@ jobs:
 
     - name: Fix gnutls bool type
       run: |
-        cd $OPENWRT_PATH
-        GNUTLS_MK="package/feeds/packages/gnutls/Makefile"
-        if [ -f "$GNUTLS_MK" ]; then
-          # 向 gnutls Makefile 注入 CFLAGS，确保 gnulib 库编译时能看到 bool 类型
-          if ! grep -q "CFLAGS.*stdbool" "$GNUTLS_MK"; then
-            sed -i 's|^(CFLAGS_HOOK)|CFLAGS += -include stdbool.h\n\1|' "$GNUTLS_MK"
-            echo "==> Injected CFLAGS into gnutls Makefile"
-            grep -n "stdbool" "$GNUTLS_MK" || echo "  (grep match on full file)"
-          else
-            echo "==> gnutls CFLAGS already injected"
-          fi
-          echo "==> gnutls Makefile content:"
-          grep -E 'CFLAGS|stdbool' "$GNUTLS_MK" | head -10
+        cd "$OPENWRT_PATH"
+        # gnutls-3.8.3 的 gnulib 依赖缺少 stdbool.h，导致编译错误
+        # 修复：向全局 .config 注入编译标志
+        if ! grep -q 'stdbool' .config; then
+          echo 'CONFIG_TARGET_CFLAGS:EXTRA+=" -include stdbool.h"' >> .config
+          echo 'CONFIG_TARGET_OPTIMIZATION:EXTRA+=" -include stdbool.h"' >> .config
+          echo '==> Added stdbool.h include to CFLAGS'
         else
-          echo "==> gnutls Makefile not found, skipping"
-       
+          echo '==> stdbool.h already in config'
+        fi
+        grep -E 'stdbool' .config || true
 
     - name: Compile Firmware
       id: compile
