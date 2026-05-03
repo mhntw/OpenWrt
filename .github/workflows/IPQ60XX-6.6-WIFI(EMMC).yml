@@ -307,25 +307,21 @@ jobs:
 
     - name: Fix gnutls bool type
       run: |
-        # gnutls-3.8.3 的 gnulib 库 basename-lgpl.c 缺少 #include <stdbool.h>
-        # 导致编译错误: error: unknown type name 'bool'
-        # 创建 quilt patch 文件，OpenWrt build 系统会自动应用
-        cd $OPENWRT_PATH
         cd $OPENWRT_PATH
         mkdir -p package/feeds/packages/gnutls/patches
-        cat > package/feeds/packages/gnutls/patches/001-include-stdbool.patch << 'EOF'
---- a/gl/basename-lgpl.c
-+++ b/gl/basename-lgpl.c
-@@ -23,6 +23,7 @@
- #include <string.h>
- 
- #include "filename.h"
-+#include <stdbool.h>
- 
- /* Return the address of the last file name component of FILENAME.
-    If FILENAME has no file name components, then return FILENAME.
-EOF
-        echo "==> Created gnutls patch: package/feeds/packages/gnutls/patches/001-include-stdbool.patch"
+        {
+          echo '--- a/gl/basename-lgpl.c'
+          echo '+++ b/gl/basename-lgpl.c'
+          echo '@@ -23,6 +23,7 @@'
+          echo ' #include <string.h>'
+          echo ''
+          echo ' #include "filename.h"'
+          echo '+#include <stdbool.h>'
+          echo ''
+          echo ' /* Return the address of the last file name component of FILENAME.'
+          echo '    If FILENAME has no file name components, then return FILENAME.'
+        } > package/feeds/packages/gnutls/patches/001-include-stdbool.patch
+        echo "==> Created gnutls patch"
         cat package/feeds/packages/gnutls/patches/001-include-stdbool.patch
 
     - name: Compile Firmware
