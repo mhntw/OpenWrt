@@ -305,26 +305,6 @@ jobs:
         
         echo "=== APK version fix applied ==="
 
-    - name: Prepare Build Directory
-      run: |
-        cd "$OPENWRT_PATH"
-        # gnutls-3.8.3 gnulib basename-lgpl.c 缺少 stdbool.h
-        # 修复：在 gnutls Makefile 的 CFLAGS 变量中加入 -include stdbool.h
-        GNUTLS_MK="package/feeds/packages/gnutls/Makefile"
-        if [ -f "$GNUTLS_MK" ]; then
-          if grep -q "stdbool" "$GNUTLS_MK"; then
-            echo "==> Already patched"
-          else
-            sed -i 's|^CFLAGS *:=|CFLAGS += -include stdbool.h\nCFLAGS :=|' "$GNUTLS_MK"
-            echo "==> CFLAGS patched:"
-            grep -n "stdbool" "$GNUTLS_MK"
-          fi
-        else
-          echo "==> gnutls Makefile not found"
-          find package/feeds -name "Makefile" -path "*/gnutls/*" 2>/dev/null | head -3
-        fi
-        echo "=== Done ==="
-
     - name: Compile Firmware
       id: compile
       run: |
@@ -337,7 +317,7 @@ jobs:
         echo "=== Patching gnutls tarball ==="
         # 下载原始 tarball，解压，修改 gnulib 源文件，重新打包替换 dl/ 里的版本
         # 先跳过 PKG_HASH（替换 tarball 后 hash 不匹配）
-        GNUTLS_MK="package/feeds/packages/gnutls/Makefile"
+        GNUTLS_MK="feeds/packages/gnutls/Makefile"
         if [ -f "$GNUTLS_MK" ]; then
           sed -i 's|^PKG_HASH:=.*|PKG_HASH:=skip|' "$GNUTLS_MK"
           echo "==> Skipped PKG_HASH"
@@ -374,7 +354,7 @@ jobs:
             cp "$HOME/gnutls-patched.tar"* "$(dirname $DL_ORIG)/" 2>/dev/null || cp "$HOME/gnutls-patched.tar"* dl/ 2>/dev/null || true
             echo "==> Replaced tarball in dl/"
           # 跳过 PKG_HASH 校验（替换 tarball 后 hash 不匹配）
-          GNUTLS_MK="package/feeds/packages/gnutls/Makefile"
+          GNUTLS_MK="feeds/packages/gnutls/Makefile"
           if [ -f "$GNUTLS_MK" ]; then
             sed -i 's|^PKG_HASH:=.*|PKG_HASH:=skip|' "$GNUTLS_MK"
             echo "==> Skipped PKG_HASH for patched tarball"
