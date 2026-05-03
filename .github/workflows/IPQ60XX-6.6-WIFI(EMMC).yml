@@ -338,7 +338,7 @@ jobs:
         if [ -n "$GNUTLS_DIR" ]; then
           for f in $(find "$GNUTLS_DIR" -name "basename-lgpl.c" 2>/dev/null); do
             if [ -f "$f" ] && ! grep -q "stdbool.h" "$f"; then
-              sed -i '1a\\n#include <stdbool.h>' "$f"
+              sed -i '1i #include <stdbool.h>' "$f"
               echo "==> Patched: $f"
             fi
           done
@@ -348,7 +348,7 @@ jobs:
           GNUTLS_DIR=$(find build_dir -type d -name "gnutls-3.8.3" 2>/dev/null | grep -v 'target-' | head -1)
           if [ -n "$GNUTLS_DIR" ]; then
             for f in $(find "$GNUTLS_DIR" -name "basename-lgpl.c" 2>/dev/null); do
-              sed -i '1a\\n#include <stdbool.h>' "$f"
+              sed -i '1i #include <stdbool.h>' "$f"
               echo "==> Patched: $f"
             done
           fi
