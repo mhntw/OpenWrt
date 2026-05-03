@@ -366,6 +366,13 @@ jobs:
             cp "$DL_ORIG" "$HOME/gnutls-orig.$(basename $DL_ORIG)"
             cp "$HOME/gnutls-patched.tar"* "$(dirname $DL_ORIG)/" 2>/dev/null || cp "$HOME/gnutls-patched.tar"* dl/ 2>/dev/null || true
             echo "==> Replaced tarball in dl/"
+          # 跳过 PKG_HASH 校验（替换 tarball 后 hash 不匹配）
+          GNUTLS_MK="package/feeds/packages/gnutls/Makefile"
+          if [ -f "$GNUTLS_MK" ]; then
+            sed -i 's|^PKG_HASH:=.*|PKG_HASH:=skip|' "$GNUTLS_MK"
+            echo "==> Skipped PKG_HASH for patched tarball"
+          fi
+
           fi
           rm -rf "$TMPDIR"
         else
