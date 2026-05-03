@@ -308,21 +308,27 @@ jobs:
     - name: Fix gnutls bool type
       run: |
         cd "$OPENWRT_PATH"
-        # gnutls-3.8.3 的 gnulib 依赖缺少 stdbool.h
-        # 修复：直接向 Makefile 注入 CFLAGS_HOOK
-        GNUTLS_MK="package/feeds/packages/gnutls/Makefile"
-        if [ -f "$GNUTLS_MK" ]; then
-          if ! grep -q "CFLAGS_HOOK" "$GNUTLS_MK"; then
-            sed -i '/^\\$(call Build\/Compile)/a\n\t$(CFLAGS) $(TARGET_CFLAGS) -include stdbool.h' "$GNUTLS_MK"
-            echo "==> Injected CFLAGS into gnutls Makefile"
-          fi
-          echo "==> gnutls CFLAGS lines:"
-          grep -n "CFLAGS" "$GNUTLS_MK" | head -5
-        else
-          echo "==> gnutls Makefile not found at $GNUTLS_MK"
-          find package/feeds -name "Makefile" -path "*/gnutls/*" 2>/dev/null | head -3
+        # gnutls-3.8.3 的 gnulib 库 basename-lgpl.c 缺少 stdbool.h
+        # 修复：直接在源文件第一行后插入 #include <stdbool.h>
+        GNUTLS_SRC="package/feeds/packages/gnutls/patches"
+        if [ -d "$GNUTLS_SRC" ]; then
+          echo "==> Checking for gnulib sources in patches dir..."
+          ls "$GNUTLS_SRC"/ | grep -E 'gnutls|lib' | head -5
         fi
-        echo "=== Done ==="
+        # 找源文件
+        PKG_BUILD_DIR=$(find build_dir -type d -name "gnutls-*" 2>/dev/null | head -1)
+        if [ -n "$PKG_BUILD_DIR" ]; then
+          echo "==> Found gnutls build dir: $PKG_BUILD_DIR"
+          for f in $(find "$PKG_BUILD_DIR" -name "basename-lgpl.c" 2>/dev/null); do
+            if ! grep -q "stdbool.h" "$f"; then
+              sed -i '1a #include <stdbool.h>' "$f"
+              echo "==> Patched: $f"
+            fi
+          done
+        else
+          echo "==> gnutls build dir not found yet (will appear during compile)"
+        fi
+        echo "=== Fix gnutls done ==="
 
     - name: Compile Firmware
       id: compile
