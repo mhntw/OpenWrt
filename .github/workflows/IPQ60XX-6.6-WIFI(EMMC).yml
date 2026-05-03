@@ -308,24 +308,21 @@ jobs:
     - name: Fix gnutls bool type
       run: |
         cd $OPENWRT_PATH
-        mkdir -p package/feeds/packages/gnutls/patches
-        {
-          echo '--- a/gl/basename-lgpl.c'
-          echo '+++ b/gl/basename-lgpl.c'
-          echo '@@ -23,6 +23,7 @@'
-          echo ' #include <string.h>'
-          echo ''
-          echo ' #include "filename.h"'
-          echo '+#include <stdbool.h>'
-          echo ''
-          echo ' /* Return the address of the last file name component of FILENAME.'
-          echo '    If FILENAME has no file name components, then return FILENAME.'
-        } > package/feeds/packages/gnutls/patches/001-include-stdbool.patch
-        # 将 patch 注册到 quilt series（OpenWrt quilt 系统要求）
-        echo "001-include-stdbool.patch" >> package/feeds/packages/gnutls/patches/series
-        echo "==> Created gnutls patch and registered in quilt series"
-        cat package/feeds/packages/gnutls/patches/series || echo "(series file may not exist yet)"
-        cat package/feeds/packages/gnutls/patches/001-include-stdbool.patch
+        GNUTLS_MK="package/feeds/packages/gnutls/Makefile"
+        if [ -f "$GNUTLS_MK" ]; then
+          # 向 gnutls Makefile 注入 CFLAGS，确保 gnulib 库编译时能看到 bool 类型
+          if ! grep -q "CFLAGS.*stdbool" "$GNUTLS_MK"; then
+            sed -i 's|^(CFLAGS_HOOK)|CFLAGS += -include stdbool.h\n\1|' "$GNUTLS_MK"
+            echo "==> Injected CFLAGS into gnutls Makefile"
+            grep -n "stdbool" "$GNUTLS_MK" || echo "  (grep match on full file)"
+          else
+            echo "==> gnutls CFLAGS already injected"
+          fi
+          echo "==> gnutls Makefile content:"
+          grep -E 'CFLAGS|stdbool' "$GNUTLS_MK" | head -10
+        else
+          echo "==> gnutls Makefile not found, skipping"
+       
 
     - name: Compile Firmware
       id: compile
