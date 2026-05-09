@@ -1,4 +1,4 @@
-name: IPQ60XX-6.6-WIFI(EMMC)
+name: IPQ60XX-6.6-WIFI(EMMC)-Optimized
 
 on:
   workflow_dispatch:
@@ -11,14 +11,11 @@ env:
   REPO_BRANCH: main-nss
   CONFIG_FILE: configs/ipq60xx-6.6-wifi(emmc).config
   DIY_SCRIPT: diy-script.sh
-  CLASH_KERNEL: amd64
   CACHE_TOOLCHAIN: true
   UPLOAD_BIN_DIR: false
   FIRMWARE_RELEASE: true
   FIRMWARE_TAG: IPQ60XX-6.6-WIFI(EMMC)
   TZ: Asia/Shanghai
-  # OpenWrt 编译自己的 CMake (3.27+)，已移除 cmake_minimum_required < 3.5 兼容
-  # 设置此变量让 CMake 自动将旧版声明视为 3.5
   CMAKE_POLICY_VERSION_MINIMUM: "3.5"
   CMAKE_POLICY_VERSION_MAXIMUM: "3.10"
 
@@ -65,7 +62,6 @@ jobs:
 
     - name: Load Custom Feeds
       run: |
-        # 根据配置文件选用对应的 feeds 文件
         CONFIG_BASENAME=$(basename $CONFIG_FILE)
         if [ -f "$GITHUB_WORKSPACE/feeds/${CONFIG_BASENAME%.config}.default" ]; then
           cp "$GITHUB_WORKSPACE/feeds/${CONFIG_BASENAME%.config}.default" openwrt/feeds.conf.default
@@ -99,82 +95,62 @@ jobs:
         cd $OPENWRT_PATH
         ./scripts/feeds update -a
         ./scripts/feeds install -a
-        # 删除冲突的 lucihttp cmake compat patch（tarball patch 已处理，无需重复）
+        # 删除冲突的 lucihttp cmake compat patch
         rm -f feeds/luci/contrib/package/lucihttp/patches/001-cmake-compat.patch
 
-    - name: Fix Kconfig Circular Dependency
+    - name: Apply Build Fixes
       run: |
         cd $OPENWRT_PATH
-        # 打断 kmod-drm-client-lib ↔ LINUX_6_18 循环依赖
-        # LINUX_6_18 内核符号 select PACKAGE_kmod-drm-client-lib，
-        # 而 kmod-drm-client-lib 自身条件也是 @LINUX_6_18，kconfig 报循环
+        
+        # Fix 1: Kconfig 循环依赖
         for f in $(find package feeds -name 'video.mk' 2>/dev/null); do
-          # kmod-cec-core: DEPENDS @LINUX_6_18 → 整行删掉（单独依赖无意义）
           sed -i '/^[[:space:]]*DEPENDS.*@LINUX_6_18$/d' "$f"
-          # kmod-cec-core 出现在 +LINUX_6_18: 前缀：去掉条件前缀
           sed -i 's/+LINUX_6_18:kmod-cec-core//' "$f"
-          # kmod-drm-client-lib: DEPENDS @DISPLAY_SUPPORT @LINUX_6_18 +kmod-xxx → 删 @LINUX_6_18
           sed -i 's/@DISPLAY_SUPPORT @LINUX_6_18 +kmod/@DISPLAY_SUPPORT +kmod/' "$f"
-          # kmod-drm-mipi-dbi: DEPENDS 末尾有 +LINUX_6_18:kmod-drm-client-lib → 删掉
           sed -i 's/+LINUX_6_18:kmod-drm-client-lib//' "$f"
         done
-        echo "=== Kconfig cycle patched ==="
-        grep -n '@LINUX_6_18' package/kernel/linux/modules/video.mk 2>/dev/null || echo "OK: no @LINUX_6_18 left"
-
-    - name: Fix PROJECT_GIT 404
-      run: |
-        cd $OPENWRT_PATH
-        # git.openwrt.org 返回 404，所有使用 $(PROJECT_GIT) 的包源码下载失败
-        # 修复策略：
-        #   1. 替换 PROJECT_GIT 为 GitHub
-        #   2. URL 路径映射：/project/xxx.git → /xxx.git（GitHub 没有 /project/ 子路径）
-        #   3. 跳过 hash 校验（git clone 生成的 tarball hash 与预设不同）
-
-        # Step 1: 替换 PROJECT_GIT 定义
+        
+        # Fix 2: PROJECT_GIT 404
         sed -i 's|^PROJECT_GIT = https://git.openwrt.org|PROJECT_GIT = https://github.com/openwrt|' include/download.mk
-        echo "=== PROJECT_GIT patched ==="
-        grep 'PROJECT_GIT' include/download.mk | head -3
-
-        # Step 2: URL 路径映射 — /project/xxx.git → /xxx.git
-        find package -name Makefile -exec grep -l 'PROJECT_GIT)/project/' {} \; | while read f; do
+        find package feeds -name Makefile -exec grep -l 'PROJECT_GIT)/project/' {} \; 2>/dev/null | while read f; do
           perl -pi -e 's|\$\(PROJECT_GIT\)/project/|\$\(PROJECT_GIT\)/|g' "$f"
         done
-        find feeds -name Makefile -exec grep -l 'PROJECT_GIT)/project/' {} \; 2>/dev/null | while read f; do
-          perl -pi -e 's|\$\(PROJECT_GIT\)/project/|\$\(PROJECT_GIT\)/|g' "$f"
-        done
-        echo "=== URL path mapping applied ==="
-
-        # Step 3: 跳过 hash 校验
-        # 把所有 GitHub/git 来源的包的 PKG_HASH/PKG_MIRROR_HASH 替换为 skip
-        # 注意：hash 长度可能是 56~70 位（sha256=64, sha512=128, 部分截断），用宽松匹配
+        
+        # Fix 3: 跳过 hash 校验 (GitHub/git 源码)
         for f in $(find package feeds -name Makefile 2>/dev/null); do
           if grep -qE 'github\.com|PKG_SOURCE_PROTO\s*:?=\s*git' "$f"; then
-            # 替换 PKG_HASH := xxx 或 PKG_HASH=xxx 为 PKG_HASH := skip（56~70位hex）
             sed -i -E 's/PKG_HASH\s*[:=]+\s*[a-f0-9]{56,128}/PKG_HASH := skip/g' "$f"
-            # 替换 PKG_MIRROR_HASH（同理）
             sed -i -E 's/PKG_MIRROR_HASH\s*[:=]+\s*[a-f0-9]{56,128}/PKG_MIRROR_HASH := skip/g' "$f"
           fi
         done
-        echo "=== Hash check bypassed for all GitHub/git packages ==="
-        echo "Modified files:"
-        grep -l 'PKG_HASH := skip' package feeds --include=Makefile -r 2>/dev/null | wc -l
-
-        # Step 4: 修复 feeds 中内联源码的 cmake_minimum_required < 3.5
-        # OpenWrt 构建自己的 CMake (3.27+)，已移除 < 3.5 兼容
-        # CMAKE_POLICY_VERSION_MINIMUM=3.5 环境变量可处理下载的 tarball 源码
-        # 但 feeds 中的内联源码 (src/ 目录) 需要直接修改
-        cd $OPENWRT_PATH
+        
+        # Fix 4: 修复 feeds 中内联源码的 cmake_minimum_required
         FIXED=0
         for cm in $(find feeds -name CMakeLists.txt 2>/dev/null); do
-          # Match any cmake_minimum_required(VERSION X.Y) regardless of version
           if grep -qP 'cmake_minimum_required\(VERSION\s+[0-9.]+\)' "$cm" 2>/dev/null; then
-            oldver=$(grep -oP 'cmake_minimum_required\(VERSION\s+\K[0-9.]+' "$cm" | head -1)
-            echo "Fixing $cm: cmake $oldver -> 3.10"
+            echo "Fixing $cm"
             sed -i 's/cmake_minimum_required(VERSION\s*[0-9.]+)/cmake_minimum_required(VERSION 3.10)/g' "$cm"
             FIXED=$((FIXED+1))
           fi
         done
-        echo "=== Fixed $FIXED inline CMakeLists.txt files ==="
+        echo "=== Fixed $FIXED CMakeLists.txt files ==="
+        
+        # Fix 5: APK 包版本格式
+        LUCI_BASE=$(find feeds -path '*/luci-base/Makefile' 2>/dev/null | head -1)
+        if [ -n "$LUCI_BASE" ]; then
+          sed -i '/PKG_VERSION/d' "$LUCI_BASE"
+          echo "PKG_VERSION:=25.294.31582" >> "$LUCI_BASE"
+          sed -i '/PKG_RELEASE/d' "$LUCI_BASE"
+          echo "PKG_RELEASE:=1" >> "$LUCI_BASE"
+        fi
+        
+        LUCI_MK=$(find feeds -path '*/luci/luci.mk' 2>/dev/null | head -1)
+        if [ -n "$LUCI_MK" ]; then
+          sed -i '/VERSION:=\$(if \$(PKG_VERSION)/c\  VERSION:=$(if $(PKG_VERSION),$(if $(PKG_RELEASE),$(PKG_VERSION)-r$(PKG_RELEASE),$(PKG_VERSION)),$(subst -,~,$(patsubst git-%,%,$(PKG_SRC_VERSION))))' "$LUCI_MK"
+          sed -i '/VERSION:=\$(PKG_PO_VERSION)/c\    VERSION:=$(subst -,~,$(patsubst git-%,%,$(PKG_PO_VERSION)))' "$LUCI_MK"
+        fi
+        
+        echo "=== All build fixes applied ==="
 
     - name: Force Single Device Build
       run: |
@@ -184,127 +160,48 @@ jobs:
         echo 'CONFIG_TARGET_qualcommax_ipq60xx_DEVICE_jdcloud_re-ss-01=y' >> .config
         sed -i '/^CONFIG_TARGET_MULTI_PROFILE=y/d' .config
         make defconfig
-        echo "=== Device config after Force Single ==="
+        echo "=== Device config ==="
         grep -E 'DEVICE_jdcloud_re-ss-01|MULTI_PROFILE' .config || true
 
     - name: Download DL Package
       run: |
         cd $OPENWRT_PATH
         make download -j$(nproc)
-        # 检查是否有下载失败的包（dl 中存在空文件或小于 1KB 的文件）
         FAILED=$(find dl -size -1024c -not -empty 2>/dev/null | wc -l)
         EMPTY=$(find dl -empty 2>/dev/null | wc -l)
-        echo "=== Download check: ${FAILED} incomplete files, ${EMPTY} empty files ==="
-        find dl -size -1024c -exec ls -l {} \;
+        echo "=== Download check: ${FAILED} incomplete, ${EMPTY} empty ==="
         find dl -size -1024c -exec rm -f {} \;
-        # 如果有大量下载失败，终止构建避免浪费时间编译
         if [ "$FAILED" -gt 5 ]; then
-          echo "❌ Too many download failures (${FAILED}), aborting build"
+          echo "❌ Too many download failures (${FAILED}), aborting"
           exit 1
         fi
 
     - name: Embed Init Settings
       run: |
-        # 将 init-settings.sh 嵌入固件，首次启动时自动执行
         cd $OPENWRT_PATH
-        
-        # 创建 files 目录结构
         mkdir -p files/etc/uci-defaults
-        
-        # 复制 init-settings.sh
         if [ -f "$GITHUB_WORKSPACE/scripts/init-settings.sh" ]; then
           cp "$GITHUB_WORKSPACE/scripts/init-settings.sh" files/etc/uci-defaults/99-init-settings
           chmod +x files/etc/uci-defaults/99-init-settings
           echo "=== Init settings embedded ==="
-          cat files/etc/uci-defaults/99-init-settings
         else
           echo "⚠️ scripts/init-settings.sh not found, skipping"
         fi
-
-    - name: Fix APK Package Version Format
-      run: |
-        # apk 包格式只允许版本号中有一个连字符分隔 version-release
-        # LuCI 生成的版本号 git-25.294.31582-8ceae5a 有两个连字符，导致 apk mkpkg 报错:
-        # "ERROR: info field 'version' has invalid value: package version is invalid"
-        # 修复方法：把 feeds/luci/modules/luci-base/Makefile 中的 PKG_VERSION/PKG_RELEASE
-        # 改为只用单一连字符分隔
-        cd $OPENWRT_PATH
-        
-        # 找 luci-base Makefile
-        LUCI_BASE=$(find feeds -path '*/luci-base/Makefile' 2>/dev/null | head -1)
-        if [ -n "$LUCI_BASE" ]; then
-          echo "==> Patching $LUCI_BASE"
-          
-          # 查看当前版本定义（保留备份）
-          grep -E 'PKG_VERSION|PKG_RELEASE|PKG_GITBRANCH|LUCI_VERSION' "$LUCI_BASE" | head -10
-          
-          # 修复方法：设置 PKG_VERSION 为纯数字（如 25.294.31582），PKG_RELEASE 为 1
-          # 这样生成的版本号是 25.294.31582-1，apk 可以正常解析
-          sed -i '/PKG_VERSION/d' "$LUCI_BASE"
-          echo "PKG_VERSION:=25.294.31582" >> "$LUCI_BASE"
-          sed -i '/PKG_RELEASE/d' "$LUCI_BASE"
-          echo "PKG_RELEASE:=1" >> "$LUCI_BASE"
-          
-          echo "=== Patched luci-base version ==="
-          grep -E 'PKG_VERSION|PKG_RELEASE' "$LUCI_BASE"
-        else
-          echo "WARNING: luci-base Makefile not found"
-        fi
-        
-        # Step 2: Fix dynamic version in luci.mk
-        # APK mkpkg 动态生成的版本在 luci.mk VERSION 变量中定义，改为纯数字
-        LUCI_MK=$(find feeds -path '*/luci/luci.mk' 2>/dev/null | head -1)
-        if [ -n "$LUCI_MK" ]; then
-          echo "==> Patching $LUCI_MK"
-          # luci.mk 第156行 VERSION 定义:
-          # VERSION:=$(if $(PKG_VERSION),...,$(PKG_SRC_VERSION))
-          # 当 PKG_VERSION 未定义时使用 PKG_SRC_VERSION (格式 git-YY.JJJ-SSSSS-HASH)
-          # APK 不允许版本号有两个连字符，需要处理
-          grep -n 'VERSION:=' "$LUCI_MK" | head -5
-          
-          # 方案: 去掉 git- 前缀 + 把剩余连字符替换为 ~ (APK 只允许一个连字符)
-          # 原版: VERSION:=$(if $(PKG_VERSION),...,$(PKG_SRC_VERSION))
-          # git-25.294.31582-8ceae5a 有两个连字符
-          # patsubst git-%,% → 25.294.31582-8ceae5a (仍两个连字符，无效)
-          # subst -,~ 后 → 25.294.31582~8ceae5a (一个连字符，有效)
-          #
-          # 修复主 VERSION 行（含 PKG_VERSION 条件判断）
-          # 原: VERSION:=$(if $(PKG_VERSION),$(if $(PKG_RELEASE),$(PKG_VERSION)-$(PKG_RELEASE),$(PKG_VERSION)),$(PKG_SRC_VERSION))
-          # 改: VERSION:=$(if $(PKG_VERSION),$(if $(PKG_RELEASE),$(PKG_VERSION)-r$(PKG_RELEASE),$(PKG_VERSION)),$(subst -,~,$(patsubst git-%,%,$(PKG_SRC_VERSION))))
-          sed -i '/VERSION:=\$(if \$(PKG_VERSION)/c\  VERSION:=$(if $(PKG_VERSION),$(if $(PKG_RELEASE),$(PKG_VERSION)-r$(PKG_RELEASE),$(PKG_VERSION)),$(subst -,~,$(patsubst git-%,%,$(PKG_SRC_VERSION))))' "$LUCI_MK"
-
-          # 修复 PKG_PO_VERSION 行（luci-i18n-* 翻译包使用）
-          # 原: VERSION:=$(PKG_PO_VERSION)
-          # 改: VERSION:=$(subst -,~,$(patsubst git-%,%,$(PKG_PO_VERSION)))
-          sed -i '/VERSION:=\$(PKG_PO_VERSION)/c\    VERSION:=$(subst -,~,$(patsubst git-%,%,$(PKG_PO_VERSION)))' "$LUCI_MK"
-
-          echo "=== After patch ==="
-          grep 'VERSION:=' "$LUCI_MK" | head -3
-        fi
-        
-        echo "=== APK version fix applied ==="
 
     - name: Compile Firmware
       id: compile
       run: |
         cd $OPENWRT_PATH
         echo "=== Final device config ==="
-        grep -E 'DEVICE_jdcloud_re-ss-01|MULTI_PROFILE|PARTSIZE|TARGET_ROOTFS_PARTSIZE' .config || true
-
-        # 多线程编译 + NSS 模块 OOM 保护
+        grep -E 'DEVICE_jdcloud_re-ss-01|MULTI_PROFILE|PARTSIZE' .config || true
         CPU_CORES=$(nproc)
-        echo "==> 使用 ${CPU_CORES} 线程编译"
-
-        # 先用多线程编译，对 NSS 相关模块限制内存
-        # 设置 ccache 最大缓存 2GB
+        echo "==> Using ${CPU_CORES} threads"
         export CCACHE_MAXSIZE="2G"
         export CCACHE_COMPRESS="1"
-
         make -j${CPU_CORES} V=i || {
-          echo "==> 多线程编译失败，回退到单线程重试..."
+          echo "==> Multi-thread failed, retrying with single thread..."
           make -j1 V=s
         }
-
         echo "status=success" >> $GITHUB_OUTPUT
         echo "DATE=$(date +"%Y-%m-%d %H:%M:%S")" >> $GITHUB_ENV
         echo "FILE_DATE=$(date +"%Y.%m.%d")" >> $GITHUB_ENV
@@ -360,5 +257,3 @@ jobs:
           ### 🧊 固件版本
           - 固件编译前最后一次➦[主源码](${{ env.REPO_URL }})更新记录
           - ${{ env.VERSION_INFO }}
-
-
